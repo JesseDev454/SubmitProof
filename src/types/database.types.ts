@@ -104,6 +104,7 @@ export type Database = {
       assignments: {
         Row: {
           course_id: string
+          closed_at: string | null
           created_at: string
           created_by: string
           current_policy_version_id: string | null
@@ -115,6 +116,7 @@ export type Database = {
         }
         Insert: {
           course_id: string
+          closed_at?: string | null
           created_at?: string
           created_by: string
           current_policy_version_id?: string | null
@@ -126,6 +128,7 @@ export type Database = {
         }
         Update: {
           course_id?: string
+          closed_at?: string | null
           created_at?: string
           created_by?: string
           current_policy_version_id?: string | null
@@ -250,6 +253,7 @@ export type Database = {
           nonce: string
           policy_version_id: string
           processed_at: string
+          provider: string
           provider_message_id: string
           sender_phone_e164: string
           student_id: string
@@ -266,6 +270,7 @@ export type Database = {
           nonce: string
           policy_version_id: string
           processed_at: string
+          provider?: string
           provider_message_id: string
           sender_phone_e164: string
           student_id: string
@@ -282,6 +287,7 @@ export type Database = {
           nonce?: string
           policy_version_id?: string
           processed_at?: string
+          provider?: string
           provider_message_id?: string
           sender_phone_e164?: string
           student_id?: string
@@ -427,9 +433,12 @@ export type Database = {
       submission_uploads: {
         Row: {
           assignment_id: string
+          finalized_at: string
           id: string
           matched_commitment_id: string | null
           policy_result: Database["public"]["Enums"]["policy_result"]
+          policy_version_id: string | null
+          reservation_id: string | null
           server_sha256: string
           storage_object_path: string
           student_id: string
@@ -439,9 +448,12 @@ export type Database = {
         }
         Insert: {
           assignment_id: string
+          finalized_at?: string
           id?: string
           matched_commitment_id?: string | null
           policy_result?: Database["public"]["Enums"]["policy_result"]
+          policy_version_id?: string | null
+          reservation_id?: string | null
           server_sha256: string
           storage_object_path: string
           student_id: string
@@ -451,9 +463,12 @@ export type Database = {
         }
         Update: {
           assignment_id?: string
+          finalized_at?: string
           id?: string
           matched_commitment_id?: string | null
           policy_result?: Database["public"]["Enums"]["policy_result"]
+          policy_version_id?: string | null
+          reservation_id?: string | null
           server_sha256?: string
           storage_object_path?: string
           student_id?: string
@@ -470,7 +485,100 @@ export type Database = {
             referencedColumns: ["id", "assignment_id", "student_id"]
           },
           {
+            foreignKeyName: "submission_uploads_policy_version_fk"
+            columns: ["assignment_id", "policy_version_id"]
+            isOneToOne: false
+            referencedRelation: "assignment_policy_versions"
+            referencedColumns: ["assignment_id", "id"]
+          },
+          {
+            foreignKeyName: "submission_uploads_reservation_owner_fk"
+            columns: ["reservation_id", "assignment_id", "student_id"]
+            isOneToOne: true
+            referencedRelation: "submission_upload_reservations"
+            referencedColumns: ["id", "assignment_id", "student_id"]
+          },
+          {
+            foreignKeyName: "submission_uploads_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: true
+            referencedRelation: "submission_upload_reservations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "submission_uploads_submission_owner_fk"
+            columns: ["submission_id", "assignment_id", "student_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id", "assignment_id", "student_id"]
+          },
+        ]
+      }
+      submission_upload_reservations: {
+        Row: {
+          assignment_id: string
+          created_at: string
+          declared_file_size_bytes: number
+          declared_mime_type: string
+          expires_at: string
+          failure_code: string | null
+          id: string
+          idempotency_key: string
+          kind: string
+          policy_version_id: string
+          staging_object_path: string
+          status: string
+          storage_received_at: string | null
+          student_id: string
+          submission_id: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string
+          declared_file_size_bytes: number
+          declared_mime_type: string
+          expires_at: string
+          failure_code?: string | null
+          id?: string
+          idempotency_key: string
+          kind: string
+          policy_version_id: string
+          staging_object_path: string
+          status?: string
+          storage_received_at?: string | null
+          student_id: string
+          submission_id: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string
+          declared_file_size_bytes?: number
+          declared_mime_type?: string
+          expires_at?: string
+          failure_code?: string | null
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          policy_version_id?: string
+          staging_object_path?: string
+          status?: string
+          storage_received_at?: string | null
+          student_id?: string
+          submission_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_upload_reservations_policy_fk"
+            columns: ["assignment_id", "policy_version_id"]
+            isOneToOne: false
+            referencedRelation: "assignment_policy_versions"
+            referencedColumns: ["assignment_id", "id"]
+          },
+          {
+            foreignKeyName: "submission_upload_reservations_submission_fk"
             columns: ["submission_id", "assignment_id", "student_id"]
             isOneToOne: false
             referencedRelation: "submissions"
@@ -572,7 +680,89 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      close_assignment: {
+        Args: { p_actor_id: string; p_assignment_id: string }
+        Returns: string
+      }
+      complete_upload_reservation: {
+        Args: {
+          p_actor_id: string
+          p_actual_size_bytes: number
+          p_detected_mime_type: string
+          p_final_object_path: string
+          p_reservation_id: string
+          p_server_sha256: string
+          p_storage_received_at: string
+        }
+        Returns: Json
+      }
+      create_assignment: {
+        Args: {
+          p_actor_id: string
+          p_course_id: string
+          p_description: string | null
+          p_policy: Json
+          p_title: string
+        }
+        Returns: string
+      }
+      create_upload_reservation: {
+        Args: {
+          p_actor_id: string
+          p_assignment_id: string
+          p_declared_size_bytes: number
+          p_idempotency_key: string
+          p_kind: string
+          p_mime_type: string
+        }
+        Returns: Json
+      }
+      issue_assignment_token: {
+        Args: { p_actor_id: string; p_assignment_id: string; p_rotate: boolean; p_token_hash: string }
+        Returns: string
+      }
+      mark_upload_reservation_expired: {
+        Args: { p_reservation_id: string }
+        Returns: boolean
+      }
+      process_commitment_event: {
+        Args: {
+          p_file_sha256: string
+          p_gateway_event_at: string | null
+          p_nonce: string
+          p_provider: string
+          p_provider_message_id: string
+          p_received_at: string
+          p_sender_phone: string
+          p_token_hash: string
+        }
+        Returns: Json
+      }
+      publish_assignment: {
+        Args: { p_actor_id: string; p_assignment_id: string }
+        Returns: string
+      }
+      record_webhook_outcome: {
+        Args: {
+          p_limited_metadata: Json
+          p_outcome: Database["public"]["Enums"]["webhook_outcome"]
+          p_provider: string
+          p_provider_message_id: string | null
+          p_received_at: string
+        }
+        Returns: string
+      }
+      update_assignment_draft: {
+        Args: {
+          p_actor_id: string
+          p_assignment_id: string
+          p_description: string | null
+          p_policy: Json | null
+          p_title: string | null
+          p_update_description: boolean
+        }
+        Returns: string
+      }
     }
     Enums: {
       assignment_status: "draft" | "published" | "closed"

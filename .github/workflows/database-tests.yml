@@ -6,6 +6,7 @@ on:
 jobs:
   database:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +45,12 @@ jobs:
 
       - name: Typecheck application
         run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run authenticated API and Storage flow
+        run: npm run test:integration
 
       - name: Stop local Supabase
         if: always()
