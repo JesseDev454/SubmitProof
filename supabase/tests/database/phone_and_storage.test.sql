@@ -94,12 +94,22 @@ select ok(
   'submission-files is private and capped at 50 MiB'
 );
 
+select ok(
+  (
+    select c.relrowsecurity
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'storage'
+      and c.relname = 'objects'
+  ),
+  'Supabase Storage RLS remains enabled on object metadata'
+);
+
 set local role anon;
-select throws_ok(
-  $$select * from storage.objects where bucket_id = 'submission-files'$$,
-  '42501',
-  null,
-  'anonymous users cannot access submission objects directly'
+select is(
+  (select count(*)::integer from storage.objects where bucket_id = 'submission-files'),
+  0,
+  'anonymous users cannot read submission objects directly'
 );
 reset role;
 
@@ -111,10 +121,9 @@ select throws_ok(
   null,
   'authenticated users cannot write submission objects directly'
 );
-select throws_ok(
-  $$select * from storage.objects where bucket_id = 'submission-files'$$,
-  '42501',
-  null,
+select is(
+  (select count(*)::integer from storage.objects where bucket_id = 'submission-files'),
+  0,
   'authenticated users cannot read submission objects directly'
 );
 

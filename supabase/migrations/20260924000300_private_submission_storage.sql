@@ -5,14 +5,5 @@ set name = excluded.name,
     public = false,
     file_size_limit = excluded.file_size_limit;
 
-alter table storage.objects enable row level security;
-revoke all on table storage.objects from anon, authenticated;
-
-drop policy if exists submitproof_deny_direct_object_access on storage.objects;
-create policy submitproof_deny_direct_object_access
-  on storage.objects
-  as restrictive
-  for all
-  to anon, authenticated
-  using (false)
-  with check (false);
+-- Supabase Storage owns the storage schema and manages RLS on storage.objects.
+-- A private bucket with no object-access policies denies direct client access.
