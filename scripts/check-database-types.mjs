@@ -32,8 +32,19 @@ const committed = readFileSync(
 const normalizeNewlines = (value) => value.replace(/\r\n/g, "\n").trimEnd();
 
 if (normalizeNewlines(generated) !== normalizeNewlines(committed)) {
+  const generatedLines = normalizeNewlines(generated).split("\n");
+  const committedLines = normalizeNewlines(committed).split("\n");
+  const lineCount = Math.max(generatedLines.length, committedLines.length);
+  const firstDifferentLine = Array.from({ length: lineCount }, (_, index) => index).find(
+    (index) => generatedLines[index] !== committedLines[index],
+  );
+
   process.stderr.write(
-    "Database types are out of date. Run npm run db:types and commit the result.\n",
+    `Database types are out of date (${generatedLines.length} generated lines, ${committedLines.length} committed lines).\n` +
+      `First difference at line ${(firstDifferentLine ?? 0) + 1}:\n` +
+      `  generated: ${generatedLines[firstDifferentLine ?? 0] ?? "<end of file>"}\n` +
+      `  committed: ${committedLines[firstDifferentLine ?? 0] ?? "<end of file>"}\n` +
+      "Run npm run db:types and commit the result.\n",
   );
   process.exitCode = 1;
 } else {
