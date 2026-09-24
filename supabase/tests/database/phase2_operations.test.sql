@@ -176,6 +176,31 @@ select is(
   'rejected',
   'a nonce reused for a different fingerprint is rejected'
 );
+select public.record_webhook_outcome(
+  'simulated', 'phase2-rejected-provider-id', 'rejected', now(),
+  '{"reason":"malformed_commitment"}'::jsonb
+);
+create temporary table phase2_rejected_message_reuse as
+select public.process_commitment_event(
+  'simulated', 'phase2-rejected-provider-id', repeat('b', 64),
+  'nonce-phase2-rejected-retry', repeat('e', 64), '+2348012346002', now(), now()
+) as result;
+select is(
+  (select result ->> 'outcome' from phase2_rejected_message_reuse),
+  'rejected',
+  'a provider message ID already recorded for a rejected callback cannot later create a commitment'
+);
+select is(
+  (select result ->> 'reason' from phase2_rejected_message_reuse),
+  'provider_message_replay',
+  'reusing a previously rejected provider message ID is recorded as a replay'
+);
+select is(
+  (select count(*)::integer from public.commitments
+   where provider_message_id = 'phase2-rejected-provider-id'),
+  0,
+  'rejected provider message ID reuse does not create a commitment'
+);
 select is(
   (select count(*)::integer from public.commitments where assignment_id = (select assignment_id from phase2_fixture)),
   1,
@@ -214,18 +239,81 @@ select is(
   'repeating upload finalization returns the existing evidence'
 );
 
+create temporary table phase2_normal_close_assignment as
+select public.create_assignment(
+  '60000000-0000-4000-8000-000000000001',
+  '61000000-0000-4000-8000-000000000001',
+  'Normal upload close boundary',
+  null,
+  jsonb_build_object(
+    'deadlineAt', (now() + interval '1 day')::text,
+    'fallbackEnabled', true,
+    'gracePeriodMinutes', 30,
+    'allowedMimeTypes', jsonb_build_array('application/pdf'),
+    'maxFileSizeBytes', 10485760
+  )
+) as assignment_id;
+select public.publish_assignment(
+  '60000000-0000-4000-8000-000000000001',
+  (select assignment_id from phase2_normal_close_assignment)
+);
+create temporary table phase2_normal_preclose_reservation as
+select public.create_upload_reservation(
+  '60000000-0000-4000-8000-000000000002',
+  (select assignment_id from phase2_normal_close_assignment),
+  'normal', 'application/pdf', 32, 'phase2-normal-before-close'
+) as result;
+select public.close_assignment(
+  '60000000-0000-4000-8000-000000000001',
+  (select assignment_id from phase2_normal_close_assignment)
+);
+create temporary table phase2_normal_after_close_completion as
+select public.complete_upload_reservation(
+  '60000000-0000-4000-8000-000000000002',
+  ((select result from phase2_normal_preclose_reservation) ->> 'reservationId')::uuid,
+  'application/pdf', 32, repeat('f', 64), now(),
+  (select a.assignment_id::text || '/' || '60000000-0000-4000-8000-000000000002' || '/' ||
+    (r.result ->> 'submissionId') || '/' || (r.result ->> 'reservationId')
+   from phase2_normal_close_assignment a cross join phase2_normal_preclose_reservation r)
+) as result;
+select is(
+  (select result ->> 'error' from phase2_normal_after_close_completion),
+  'assignment_closed',
+  'a normal reservation created before closure cannot be finalized after closure'
+);
+select is(
+  (select count(*)::integer from public.submission_uploads
+   where reservation_id = ((select result from phase2_normal_preclose_reservation) ->> 'reservationId')::uuid),
+  0,
+  'a normal post-close completion creates no upload evidence'
+);
+
 select public.close_assignment(
   '60000000-0000-4000-8000-000000000001',
   (select assignment_id from phase2_fixture)
 );
+create temporary table phase2_closed_fallback_reservation as
+select public.create_upload_reservation(
+  (select student_id from phase2_fixture),
+  (select assignment_id from phase2_fixture),
+  'fallback', 'application/pdf', 32, 'phase2-closed-upload-1'
+) as result;
 select is(
-  (public.create_upload_reservation(
-    (select student_id from phase2_fixture),
-    (select assignment_id from phase2_fixture),
-    'fallback', 'application/pdf', 32, 'phase2-closed-upload-1'
-  ) ->> 'status'),
+  (select result ->> 'status' from phase2_closed_fallback_reservation),
   'reserved',
   'closed assignment permits upload reservations for existing commitments'
+);
+select is(
+  (public.complete_upload_reservation(
+    (select student_id from phase2_fixture),
+    ((select result from phase2_closed_fallback_reservation) ->> 'reservationId')::uuid,
+    'application/pdf', 32, repeat('c', 64), now(),
+    (select assignment_id::text || '/' || student_id::text || '/' ||
+      (result ->> 'submissionId') || '/' || (result ->> 'reservationId')
+     from phase2_fixture cross join phase2_closed_fallback_reservation)
+  ) ->> 'policyResult'),
+  'qualifies',
+  'a qualifying pre-close fallback commitment remains usable after closure'
 );
 select is(
   (public.process_commitment_event(

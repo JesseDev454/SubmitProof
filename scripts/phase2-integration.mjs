@@ -128,7 +128,7 @@ async function createStoredFile(path, token, bytes) {
   if (error) throw error
 }
 
-async function reserveAndComplete({ assignmentId, cookie, fileBytes, idempotencyKey, kind = 'fallback' }) {
+async function reserveAndStage({ assignmentId, cookie, fileBytes, idempotencyKey, kind = 'fallback' }) {
   const reservationResult = await api(`/api/assignments/${assignmentId}/uploads`, {
     cookie,
     method: 'POST',
@@ -144,7 +144,11 @@ async function reserveAndComplete({ assignmentId, cookie, fileBytes, idempotency
   const uploadToken = new URL(reservation.signedUploadUrl).searchParams.get('token')
   assert.ok(uploadToken)
   await createStoredFile(reservation.stagingObjectPath, uploadToken, fileBytes)
+  return reservation
+}
 
+async function reserveAndComplete({ assignmentId, cookie, fileBytes, idempotencyKey, kind = 'fallback' }) {
+  const reservation = await reserveAndStage({ assignmentId, cookie, fileBytes, idempotencyKey, kind })
   const completed = await api(`/api/uploads/${reservation.reservationId}/complete`, {
     cookie,
     method: 'POST',
@@ -266,12 +270,28 @@ try {
   })
   assert.equal(providerConflict.response.status, 400)
 
+  const malformedProviderMessageId = randomUUID()
   const malformed = await api('/api/dev/simulate-sms', {
     cookie: studentCookie,
     method: 'POST',
-    body: { payload: `SP2|${token}|${firstNonce}|${firstHash}` },
+    body: { payload: `SP2|${token}|${firstNonce}|${firstHash}`, providerMessageId: malformedProviderMessageId },
   })
   assert.equal(malformed.response.status, 400)
+  const malformedMessageReuse = await api('/api/dev/simulate-sms', {
+    cookie: studentCookie,
+    method: 'POST',
+    body: {
+      payload: `SP1|${token}|${randomUUID().replaceAll('-', '')}|${firstHash}`,
+      providerMessageId: malformedProviderMessageId,
+    },
+  })
+  assert.equal(malformedMessageReuse.response.status, 400, 'a rejected callback ID cannot accept a later valid payload')
+  const { count: malformedMessageCommitments, error: malformedMessageCommitmentsError } = await admin
+    .from('commitments')
+    .select('id', { count: 'exact', head: true })
+    .eq('provider_message_id', malformedProviderMessageId)
+  if (malformedMessageCommitmentsError) throw malformedMessageCommitmentsError
+  assert.equal(malformedMessageCommitments, 0)
 
   const completed = await reserveAndComplete({
     assignmentId,
@@ -310,6 +330,49 @@ try {
   assert.equal(normalFlow.evidence.verificationResult, 'not_applicable')
   assert.equal(normalFlow.evidence.policyResult, 'not_applicable')
 
+  const invalidSignatureReservation = await reserveAndStage({
+    assignmentId,
+    cookie: outsiderStudentCookie,
+    fileBytes: Buffer.from([0xff, 0xfe, 0xff]),
+    idempotencyKey: randomUUID(),
+    kind: 'normal',
+  })
+  const invalidSignatureResult = await api(`/api/uploads/${invalidSignatureReservation.reservationId}/complete`, {
+    cookie: outsiderStudentCookie,
+    method: 'POST',
+  })
+  assert.equal(invalidSignatureResult.response.status, 400)
+  const { data: invalidSignatureObject } = await admin.storage
+    .from('submission-files')
+    .info(invalidSignatureReservation.stagingObjectPath)
+  assert.equal(invalidSignatureObject, null, 'rejected unsupported file bytes are removed from staging')
+
+  const disallowedPngReservation = await reserveAndStage({
+    assignmentId,
+    cookie: outsiderStudentCookie,
+    fileBytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    idempotencyKey: randomUUID(),
+    kind: 'normal',
+  })
+  const disallowedPngResult = await api(`/api/uploads/${disallowedPngReservation.reservationId}/complete`, {
+    cookie: outsiderStudentCookie,
+    method: 'POST',
+  })
+  assert.equal(disallowedPngResult.response.status, 400)
+  const { data: disallowedPngObject } = await admin.storage
+    .from('submission-files')
+    .info(disallowedPngReservation.stagingObjectPath)
+  assert.equal(disallowedPngObject, null, 'rejected policy-mismatched bytes are removed from staging')
+
+  const pendingNormalFile = Buffer.from('%PDF-1.7\nReserved before assignment close\n%%EOF\n')
+  const pendingNormalUpload = await reserveAndStage({
+    assignmentId,
+    cookie: outsiderStudentCookie,
+    fileBytes: pendingNormalFile,
+    idempotencyKey: randomUUID(),
+    kind: 'normal',
+  })
+
   const lecturerEvidence = await api(`/api/assignments/${assignmentId}/submissions`, { cookie: lecturerCookie })
   assert.equal(lecturerEvidence.response.status, 200)
   assert.equal(lecturerEvidence.payload.data.submissions.length, 2)
@@ -345,6 +408,18 @@ try {
     method: 'POST',
   })
   assert.equal(closed.response.status, 200, JSON.stringify(closed.payload))
+  const finalizedAfterClose = await api(`/api/uploads/${pendingNormalUpload.reservationId}/complete`, {
+    cookie: outsiderStudentCookie,
+    method: 'POST',
+  })
+  assert.equal(finalizedAfterClose.response.status, 409, JSON.stringify(finalizedAfterClose.payload))
+  const { data: postCloseEvidence, error: postCloseEvidenceError } = await admin
+    .from('submission_uploads')
+    .select('id')
+    .eq('reservation_id', pendingNormalUpload.reservationId)
+    .maybeSingle()
+  if (postCloseEvidenceError) throw postCloseEvidenceError
+  assert.equal(postCloseEvidence, null, 'a normal pre-close reservation creates no evidence after closure')
   const closedAssignment = await api(`/api/assignments/${assignmentId}`, { cookie: studentCookie })
   assert.equal(closedAssignment.response.status, 200)
   assert.ok(closedAssignment.payload.data.policy)
