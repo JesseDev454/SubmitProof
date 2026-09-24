@@ -31,6 +31,14 @@ jobs:
       - name: Check generated database types
         run: npm run db:types:check
 
+      - name: Upload generated types for mismatch diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-database-types
+          path: .generated-database.types.ts
+          if-no-files-found: ignore
+
       - name: Lint application
         run: npm run lint
 
