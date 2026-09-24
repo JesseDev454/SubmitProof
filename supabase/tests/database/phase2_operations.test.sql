@@ -34,18 +34,6 @@ select ok(
   'authenticated clients cannot invoke privileged assignment writes'
 );
 
-select is(
-  public.create_assignment(
-    '60000000-0000-4000-8000-000000000001',
-    '61000000-0000-4000-8000-000000000001',
-    'Phase 2 assignment',
-    'A controlled test fixture',
-    '{"deadlineAt":"2026-12-01T12:00:00Z","fallbackEnabled":true,"gracePeriodMinutes":30,"allowedMimeTypes":["application/pdf"],"maxFileSizeBytes":10485760}'::jsonb
-  )::text,
-  (select id::text from public.assignments where title = 'Phase 2 assignment'),
-  'assignment and initial policy are created atomically by a role-checked operation'
-);
-
 create temporary table phase2_fixture (
   assignment_id uuid not null,
   student_id uuid not null,
@@ -56,8 +44,23 @@ create temporary table phase2_fixture (
   token_id uuid
 ) on commit drop;
 insert into phase2_fixture (assignment_id, student_id)
-select id, '60000000-0000-4000-8000-000000000002'
-from public.assignments where title = 'Phase 2 assignment';
+values (
+  public.create_assignment(
+    '60000000-0000-4000-8000-000000000001',
+    '61000000-0000-4000-8000-000000000001',
+    'Phase 2 assignment',
+    'A controlled test fixture',
+    '{"deadlineAt":"2026-12-01T12:00:00Z","fallbackEnabled":true,"gracePeriodMinutes":30,"allowedMimeTypes":["application/pdf"],"maxFileSizeBytes":10485760}'::jsonb
+  ),
+  '60000000-0000-4000-8000-000000000002'
+);
+select is(
+  (select count(*)::integer
+   from public.assignment_policy_versions p
+   where p.assignment_id = (select assignment_id from phase2_fixture)),
+  1,
+  'assignment creation atomically adds its initial policy version'
+);
 update phase2_fixture f
 set original_policy_id = p.id,
     current_policy_id = p.id
@@ -281,6 +284,7 @@ select throws_ok(
   'a closed assignment rejects new reservations when its only commitment is ineligible'
 );
 
+grant select on phase2_fixture to authenticated;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '60000000-0000-4000-8000-000000000002', true);
 select is(
