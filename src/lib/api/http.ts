@@ -49,13 +49,19 @@ function assertSameOrigin(request: NextRequest): void {
   const origin = request.headers.get('origin')
   if (!origin) return
 
+  let originValue: string
   let requestOrigin: string
   try {
-    requestOrigin = new URL(request.url).origin
+    const requestUrl = new URL(request.url)
+    const host = request.headers.get('host') ?? request.headers.get('x-forwarded-host') ?? requestUrl.host
+    const forwardedProtocol = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+    const protocol = forwardedProtocol || requestUrl.protocol.slice(0, -1)
+    originValue = new URL(origin).origin
+    requestOrigin = new URL(`${protocol}://${host}`).origin
   } catch {
     throw new ApiError(400, 'invalid_request_origin', 'The request origin is invalid.')
   }
-  if (origin !== requestOrigin) {
+  if (originValue !== requestOrigin) {
     throw new ApiError(403, 'cross_origin_request', 'Cross-origin changes are not allowed.')
   }
 }
