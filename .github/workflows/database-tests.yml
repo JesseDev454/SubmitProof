@@ -1,0 +1,42 @@
+name: Database tests
+
+on:
+  pull_request:
+
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start local Supabase
+        run: npm run db:start
+
+      - name: Reset database from migrations
+        run: npm run db:reset
+
+      - name: Run pgTAP tests
+        run: npm run db:test
+
+      - name: Lint database
+        run: npm run db:lint
+
+      - name: Check generated database types
+        run: npm run db:types:check
+
+      - name: Lint application
+        run: npm run lint
+
+      - name: Typecheck application
+        run: npm run typecheck
+
+      - name: Stop local Supabase
+        if: always()
+        run: npm run db:stop
