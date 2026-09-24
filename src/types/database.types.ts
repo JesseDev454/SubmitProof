@@ -50,6 +50,7 @@ export type Database = {
           {
             foreignKeyName: "assignment_policy_versions_assignment_owner_fk"
             columns: ["assignment_id", "created_by"]
+            isOneToOne: false
             referencedRelation: "assignments"
             referencedColumns: ["id", "created_by"]
           },
@@ -87,12 +88,14 @@ export type Database = {
           {
             foreignKeyName: "assignment_tokens_assignment_id_fkey"
             columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "assignments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "assignment_tokens_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -136,12 +139,14 @@ export type Database = {
           {
             foreignKeyName: "assignments_course_owner_fk"
             columns: ["course_id", "created_by"]
+            isOneToOne: false
             referencedRelation: "courses"
             referencedColumns: ["id", "lecturer_id"]
           },
           {
             foreignKeyName: "assignments_current_policy_version_fk"
             columns: ["id", "current_policy_version_id"]
+            isOneToOne: false
             referencedRelation: "assignment_policy_versions"
             referencedColumns: ["assignment_id", "id"]
           },
@@ -194,36 +199,42 @@ export type Database = {
           {
             foreignKeyName: "audit_events_actor_id_fkey"
             columns: ["actor_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "audit_events_assignment_id_fkey"
             columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "assignments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "audit_events_commitment_id_fkey"
             columns: ["commitment_id"]
+            isOneToOne: false
             referencedRelation: "commitments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "audit_events_course_id_fkey"
             columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "audit_events_submission_id_fkey"
             columns: ["submission_id"]
+            isOneToOne: false
             referencedRelation: "submissions"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "audit_events_upload_id_fkey"
             columns: ["upload_id"]
+            isOneToOne: false
             referencedRelation: "submission_uploads"
             referencedColumns: ["id"]
           },
@@ -282,12 +293,14 @@ export type Database = {
           {
             foreignKeyName: "commitments_policy_assignment_fk"
             columns: ["assignment_id", "policy_version_id"]
+            isOneToOne: false
             referencedRelation: "assignment_policy_versions"
             referencedColumns: ["assignment_id", "id"]
           },
           {
             foreignKeyName: "commitments_submission_owner_fk"
             columns: ["submission_id", "assignment_id", "student_id"]
+            isOneToOne: false
             referencedRelation: "submissions"
             referencedColumns: ["id", "assignment_id", "student_id"]
           },
@@ -299,6 +312,7 @@ export type Database = {
               "student_id",
               "sender_phone_e164",
             ]
+            isOneToOne: false
             referencedRelation: "assignment_tokens"
             referencedColumns: [
               "id",
@@ -335,6 +349,7 @@ export type Database = {
           {
             foreignKeyName: "courses_lecturer_id_fkey"
             columns: ["lecturer_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -363,12 +378,14 @@ export type Database = {
           {
             foreignKeyName: "enrollments_course_id_fkey"
             columns: ["course_id"]
+            isOneToOne: false
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "enrollments_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -448,12 +465,14 @@ export type Database = {
           {
             foreignKeyName: "submission_uploads_matched_commitment_owner_fk"
             columns: ["matched_commitment_id", "assignment_id", "student_id"]
+            isOneToOne: false
             referencedRelation: "commitments"
             referencedColumns: ["id", "assignment_id", "student_id"]
           },
           {
             foreignKeyName: "submission_uploads_submission_owner_fk"
             columns: ["submission_id", "assignment_id", "student_id"]
+            isOneToOne: false
             referencedRelation: "submissions"
             referencedColumns: ["id", "assignment_id", "student_id"]
           },
@@ -488,12 +507,14 @@ export type Database = {
           {
             foreignKeyName: "submissions_assignment_id_fkey"
             columns: ["assignment_id"]
+            isOneToOne: false
             referencedRelation: "assignments"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "submissions_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -540,6 +561,7 @@ export type Database = {
           {
             foreignKeyName: "webhook_events_commitment_id_fkey"
             columns: ["commitment_id"]
+            isOneToOne: false
             referencedRelation: "commitments"
             referencedColumns: ["id"]
           },
@@ -724,3 +746,4 @@ export const Constants = {
     },
   },
 } as const
+
