@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       p_actor_id: actor.id,
       p_course_id: body.courseId,
       p_title: body.title,
-      p_description: body.description ?? null,
+      p_description: body.description ?? '',
       p_policy: body.policy,
     })
     if (error) throw error

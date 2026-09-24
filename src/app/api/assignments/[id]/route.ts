@@ -48,8 +48,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { error } = await admin.rpc('update_assignment_draft', {
       p_actor_id: actor.id,
       p_assignment_id: id,
-      p_title: body.title ?? null,
-      p_description: body.description ?? null,
+      p_title: body.title ?? '',
+      p_description: body.description ?? '',
+      p_update_title: Object.hasOwn(body, 'title'),
       p_update_description: Object.hasOwn(body, 'description'),
       p_policy: body.policy ?? null,
     })

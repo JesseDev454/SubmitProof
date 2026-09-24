@@ -167,7 +167,7 @@ begin
   end if;
 
   insert into public.assignments (course_id, created_by, title, description)
-  values (p_course_id, p_actor_id, btrim(p_title), p_description)
+  values (p_course_id, p_actor_id, btrim(p_title), nullif(btrim(p_description), ''))
   returning id into new_assignment_id;
 
   new_policy_id := private.insert_assignment_policy_version(
@@ -192,6 +192,7 @@ create function public.update_assignment_draft(
   p_assignment_id uuid,
   p_title text,
   p_description text,
+  p_update_title boolean,
   p_update_description boolean,
   p_policy jsonb
 )
@@ -221,10 +222,10 @@ begin
   if assignment_row.status <> 'draft' then
     raise exception using errcode = 'P0001', message = 'assignment is not a draft';
   end if;
-  if p_title is null and not p_update_description and p_policy is null then
+  if not p_update_title and not p_update_description and p_policy is null then
     raise exception using errcode = '22023', message = 'empty assignment update';
   end if;
-  if p_title is not null and char_length(btrim(p_title)) not between 1 and 200 then
+  if p_update_title and char_length(btrim(p_title)) not between 1 and 200 then
     raise exception using errcode = '22023', message = 'invalid assignment title';
   end if;
 
@@ -244,8 +245,11 @@ begin
   end if;
 
   update public.assignments
-  set title = coalesce(btrim(p_title), title),
-      description = case when p_update_description then p_description else description end
+  set title = case when p_update_title then btrim(p_title) else title end,
+      description = case
+        when p_update_description then nullif(btrim(p_description), '')
+        else description
+      end
   where id = p_assignment_id;
 
   if policy_changed then
@@ -992,7 +996,7 @@ revoke all on function private.validate_phase2_policy(jsonb) from public, anon, 
 revoke all on function private.insert_assignment_policy_version(uuid, uuid, integer, jsonb) from public, anon, authenticated, service_role;
 
 revoke all on function public.create_assignment(uuid, uuid, text, text, jsonb) from public, anon, authenticated;
-revoke all on function public.update_assignment_draft(uuid, uuid, text, text, boolean, jsonb) from public, anon, authenticated;
+revoke all on function public.update_assignment_draft(uuid, uuid, text, text, boolean, boolean, jsonb) from public, anon, authenticated;
 revoke all on function public.publish_assignment(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.close_assignment(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.issue_assignment_token(uuid, uuid, text, boolean) from public, anon, authenticated;
@@ -1003,7 +1007,7 @@ revoke all on function public.complete_upload_reservation(uuid, uuid, text, bigi
 revoke all on function public.mark_upload_reservation_expired(uuid) from public, anon, authenticated;
 
 grant execute on function public.create_assignment(uuid, uuid, text, text, jsonb) to service_role;
-grant execute on function public.update_assignment_draft(uuid, uuid, text, text, boolean, jsonb) to service_role;
+grant execute on function public.update_assignment_draft(uuid, uuid, text, text, boolean, boolean, jsonb) to service_role;
 grant execute on function public.publish_assignment(uuid, uuid) to service_role;
 grant execute on function public.close_assignment(uuid, uuid) to service_role;
 grant execute on function public.issue_assignment_token(uuid, uuid, text, boolean) to service_role;

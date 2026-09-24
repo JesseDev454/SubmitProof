@@ -71,7 +71,7 @@ select lives_ok(
   $$select public.update_assignment_draft(
       '60000000-0000-4000-8000-000000000001',
       (select assignment_id from phase2_fixture),
-      null, null, false,
+      null, null, false, false,
       jsonb_build_object(
         'deadlineAt', (now() + interval '1 day')::text,
         'fallbackEnabled', true,
@@ -103,7 +103,7 @@ select throws_ok(
   $$select public.update_assignment_draft(
       '60000000-0000-4000-8000-000000000001',
       (select assignment_id from phase2_fixture),
-      null, null, false,
+      null, null, false, false,
       jsonb_build_object(
         'deadlineAt', (now() + interval '2 days')::text,
         'fallbackEnabled', true,
