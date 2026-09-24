@@ -14,7 +14,11 @@
     "db:test": "supabase test db --local supabase/tests/database",
     "db:lint": "supabase db lint --local --schema public --level error --fail-on error",
     "db:types": "supabase gen types --local --schema public --lang typescript > src/types/database.types.ts",
-    "db:types:check": "node scripts/check-database-types.mjs"
+    "db:types:check": "node scripts/check-database-types.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "node scripts/phase2-integration.mjs",
+    "db:uploads:cleanup": "node scripts/cleanup-abandoned-uploads.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -25,6 +29,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@next/env": "^16.3.6",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -33,6 +38,7 @@
     "eslint-config-next": "16.3.6",
     "supabase": "2.117.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

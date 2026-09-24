@@ -18,3 +18,13 @@ npm run typecheck
 ```
 
 `npm run db:types` regenerates `src/types/database.types.ts` after a schema change. `npm run db:stop` stops the local stack when you are done. Local credentials and Supabase runtime state are not committed.
+
+## Phase 2 verification
+
+```sh
+npm test
+npm run test:integration
+npm run db:uploads:cleanup
+```
+
+The integration script creates temporary local users and drives the authenticated assignment, simulated commitment, private upload, verification, and lecturer review APIs. It refuses to use a non-local Supabase endpoint. The simulator is for local/test environments only; live SMS transport is not enabled. See [the API contract](docs/API.md), [architecture notes](docs/ARCHITECTURE.md), and [demo steps](docs/DEMO_FLOW.md).
