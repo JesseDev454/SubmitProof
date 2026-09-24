@@ -40,7 +40,7 @@ export default function FallbackPage() {
     setUploadError,
   } = useSubmissionFlow();
 
-  const [isLoadingToken, setIsLoadingToken] = useState(true);
+  const [isLoadingToken, setIsLoadingToken] = useState(!commitmentToken);
   const [isRetrying, setIsRetrying] = useState(false);
   const [usingPlaceholderToken, setUsingPlaceholderToken] = useState(false);
 
@@ -56,7 +56,6 @@ export default function FallbackPage() {
   // Request fallback token on mount
   useEffect(() => {
     if (!file || !fileHash || commitmentToken) {
-      setIsLoadingToken(false);
       return;
     }
 
