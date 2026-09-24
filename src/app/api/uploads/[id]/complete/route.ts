@@ -66,6 +66,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const detectedMime = detectSupportedMimeType(bytes)
     if (!detectedMime) {
       await rejectReservation(admin, actor.id, reservation, bytes.byteLength, 'application/octet-stream', '0'.repeat(64), fileInfo.createdAt)
+      await removeStagingObject(admin, reservation.staging_object_path)
       throw new ApiError(400, 'unsupported_file_type', 'The uploaded file type is not supported.')
     }
     const serverSha256 = createHash('sha256').update(bytes).digest('hex')
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       detectedMime !== reservation.declared_mime_type
     ) {
       await rejectReservation(admin, actor.id, reservation, bytes.byteLength, detectedMime, serverSha256, fileInfo.createdAt)
+      await removeStagingObject(admin, reservation.staging_object_path)
       throw new ApiError(400, 'file_policy_mismatch', 'The uploaded file does not meet the assignment file rules.')
     }
 
@@ -112,7 +114,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const result = data as unknown as CompleteResult
     if (result.error) {
       await bucket.remove([finalObjectPath])
-      const status = result.error === 'upload_expired' ? 409 : 400
+      await removeStagingObject(admin, reservation.staging_object_path)
+      const status = ['upload_expired', 'assignment_closed'].includes(result.error) ? 409 : 400
       throw new ApiError(status, result.error, 'The upload does not satisfy the reservation and assignment rules.')
     }
 
@@ -133,7 +136,7 @@ async function rejectReservation(
   storageReceivedAt: string,
 ) {
   const finalPath = `${reservation.assignment_id}/${reservation.student_id}/${reservation.submission_id}/${reservation.id}`
-  await admin.rpc('complete_upload_reservation', {
+  const { data, error } = await admin.rpc('complete_upload_reservation', {
     p_actor_id: actorId,
     p_reservation_id: reservation.id,
     p_detected_mime_type: mimeType,
@@ -142,12 +145,16 @@ async function rejectReservation(
     p_storage_received_at: storageReceivedAt,
     p_final_object_path: finalPath,
   })
+  if (error) throw error
+  if (!(data as CompleteResult | null)?.error) {
+    throw new Error('The upload reservation was not marked rejected.')
+  }
 }
 
 async function removeStagingObject(admin: ReturnType<typeof createAdminClient>, path: string) {
   const { error } = await admin.storage.from('submission-files').remove([path])
   if (error) {
-    // The scheduled cleanup script retries removal of finalized staging objects after signed URLs expire.
-    console.error('Could not remove finalized staging upload; cleanup can retry it.')
+    // Cleanup retries stale rejected and finalized staging objects after signed URLs expire.
+    console.error('Could not remove staging upload; cleanup can retry it.')
   }
 }

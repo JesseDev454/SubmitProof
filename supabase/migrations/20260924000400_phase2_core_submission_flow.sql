@@ -447,6 +447,12 @@ as $$
 declare
   new_event_id uuid;
 begin
+  if p_provider_message_id is not null
+     and char_length(btrim(p_provider_message_id)) between 1 and 200 then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('provider-message:' || p_provider_message_id, 0)
+    );
+  end if;
   insert into public.webhook_events (
     provider, provider_message_id, outcome, received_at, processed_at, limited_metadata
   ) values (
@@ -484,6 +490,13 @@ declare
   new_event_id uuid;
   has_existing_provider_message boolean;
 begin
+  if p_provider_message_id is not null
+     and char_length(btrim(p_provider_message_id)) between 1 and 200 then
+    perform pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('provider-message:' || p_provider_message_id, 0)
+    );
+  end if;
+
   if p_provider is null or p_provider not in ('simulated', 'africastalking')
      or p_provider_message_id is null
      or char_length(btrim(p_provider_message_id)) not between 1 and 200
@@ -500,9 +513,6 @@ begin
     return jsonb_build_object('outcome', 'rejected', 'reason', 'malformed_callback');
   end if;
 
-  perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('provider:' || p_provider || ':' || p_provider_message_id, 0)
-  );
   select * into existing_commitment from public.commitments
   where provider_message_id = p_provider_message_id;
   has_existing_provider_message := found;
@@ -536,6 +546,22 @@ begin
       '{"reason":"provider_message_conflict"}'::jsonb
     );
     return jsonb_build_object('outcome', 'rejected', 'reason', 'provider_message_conflict');
+  end if;
+
+  if exists (
+    select 1 from public.webhook_events w
+    where w.provider_message_id = p_provider_message_id
+      and w.outcome <> 'processing_failed'
+  ) then
+    insert into public.webhook_events (
+      provider, provider_message_id, outcome, gateway_event_at,
+      received_at, processed_at, limited_metadata
+    ) values (
+      p_provider, p_provider_message_id, 'rejected', p_gateway_event_at,
+      coalesce(p_received_at, now()), now(),
+      '{"reason":"provider_message_replay"}'::jsonb
+    );
+    return jsonb_build_object('outcome', 'rejected', 'reason', 'provider_message_replay');
   end if;
 
   select * into token_row from public.assignment_tokens t
@@ -859,7 +885,8 @@ begin
   end if;
 
   select * into assignment_row from public.assignments a
-  where a.id = reservation_row.assignment_id;
+  where a.id = reservation_row.assignment_id
+  for update;
   select * into policy_row from public.assignment_policy_versions p
   where p.id = reservation_row.policy_version_id;
   if p_actual_size_bytes > policy_row.max_file_size_bytes
@@ -893,6 +920,37 @@ begin
     return jsonb_build_object('error', 'upload_expired');
   end if;
 
+  if assignment_row.status = 'closed' and (
+    reservation_row.kind <> 'fallback'
+    or not exists (
+      select 1
+      from public.commitments c
+      join public.assignment_policy_versions cp on cp.id = c.policy_version_id
+      where c.assignment_id = reservation_row.assignment_id
+        and c.student_id = reservation_row.student_id
+        and c.file_sha256 = p_server_sha256
+        and c.processed_at <= assignment_row.closed_at
+        and cp.fallback_enabled
+        and c.gateway_event_at is not null
+        and c.gateway_event_at < cp.deadline_at
+        and p_storage_received_at < cp.deadline_at
+          + make_interval(mins => cp.grace_period_minutes)
+    )
+  ) then
+    update public.submission_upload_reservations
+    set status = 'rejected', failure_code = 'assignment_closed', updated_at = now()
+    where id = p_reservation_id;
+    insert into public.audit_events (
+      actor_id, source, course_id, assignment_id, submission_id,
+      event_type, event_at, metadata
+    ) values (
+      p_actor_id, 'api', assignment_row.course_id, assignment_row.id,
+      reservation_row.submission_id, 'upload.rejected', now(),
+      '{"reason":"assignment_closed"}'::jsonb
+    );
+    return jsonb_build_object('error', 'assignment_closed');
+  end if;
+
   computed_path := reservation_row.assignment_id::text || '/' ||
     reservation_row.student_id::text || '/' || reservation_row.submission_id::text || '/' ||
     p_reservation_id::text;
@@ -910,6 +968,10 @@ begin
     where c.assignment_id = reservation_row.assignment_id
       and c.student_id = reservation_row.student_id
       and c.file_sha256 = p_server_sha256
+      and (
+        assignment_row.status <> 'closed'
+        or c.processed_at <= assignment_row.closed_at
+      )
     order by (
       cp.fallback_enabled
       and c.gateway_event_at is not null

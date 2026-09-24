@@ -287,6 +287,12 @@ select is(
   0,
   'a normal post-close completion creates no upload evidence'
 );
+select is(
+  (select r.status::text from public.submission_upload_reservations r
+   where r.id = ((select result from phase2_normal_preclose_reservation) ->> 'reservationId')::uuid),
+  'rejected',
+  'a normal reservation rejected after closure is terminal for cleanup'
+);
 
 select public.close_assignment(
   '60000000-0000-4000-8000-000000000001',

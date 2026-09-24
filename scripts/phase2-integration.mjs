@@ -420,6 +420,10 @@ try {
     .maybeSingle()
   if (postCloseEvidenceError) throw postCloseEvidenceError
   assert.equal(postCloseEvidence, null, 'a normal pre-close reservation creates no evidence after closure')
+  const { data: postCloseStagingObject } = await admin.storage
+    .from('submission-files')
+    .info(pendingNormalUpload.stagingObjectPath)
+  assert.equal(postCloseStagingObject, null, 'rejected post-close upload staging bytes are removed')
   const closedAssignment = await api(`/api/assignments/${assignmentId}`, { cookie: studentCookie })
   assert.equal(closedAssignment.response.status, 200)
   assert.ok(closedAssignment.payload.data.policy)

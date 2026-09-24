@@ -21,15 +21,15 @@ const { data: expired, error: expiredError } = await admin
   .lt('expires_at', cutoff)
 if (expiredError) throw expiredError
 
-const finalizedCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-const { data: finalized, error: finalizedError } = await admin
+const terminalCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+const { data: terminal, error: terminalError } = await admin
   .from('submission_upload_reservations')
   .select('id, status, staging_object_path')
-  .eq('status', 'finalized')
-  .lt('updated_at', finalizedCutoff)
-if (finalizedError) throw finalizedError
+  .in('status', ['finalized', 'rejected'])
+  .lt('updated_at', terminalCutoff)
+if (terminalError) throw terminalError
 
-const candidates = [...(expired ?? []), ...(finalized ?? [])]
+const candidates = [...(expired ?? []), ...(terminal ?? [])]
 for (const reservation of candidates) {
   if (!apply) {
     process.stdout.write(`Would remove staging object ${reservation.staging_object_path}\n`)
