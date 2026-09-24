@@ -29,7 +29,7 @@ const committed = readFileSync(
   resolve(projectRoot, "src/types/database.types.ts"),
   "utf8",
 );
-const generatedPath = resolve(projectRoot, ".generated-database.types.ts");
+const generatedPath = resolve(projectRoot, "generated-database.types.ts");
 const normalizeNewlines = (value) => value.replace(/\r\n/g, "\n").trimEnd();
 
 if (normalizeNewlines(generated) !== normalizeNewlines(committed)) {
@@ -46,7 +46,7 @@ if (normalizeNewlines(generated) !== normalizeNewlines(committed)) {
       `First difference at line ${(firstDifferentLine ?? 0) + 1}:\n` +
       `  generated: ${generatedLines[firstDifferentLine ?? 0] ?? "<end of file>"}\n` +
       `  committed: ${committedLines[firstDifferentLine ?? 0] ?? "<end of file>"}\n` +
-      "The generated file was saved to .generated-database.types.ts for comparison.\n" +
+      "The generated file was saved to generated-database.types.ts for comparison.\n" +
       "Run npm run db:types and commit the result.\n",
   );
   process.exitCode = 1;

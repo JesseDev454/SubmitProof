@@ -36,7 +36,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: generated-database-types
-          path: .generated-database.types.ts
+          path: generated-database.types.ts
           if-no-files-found: ignore
 
       - name: Lint application

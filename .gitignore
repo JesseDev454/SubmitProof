@@ -46,4 +46,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.generated-database.types.ts
+generated-database.types.ts
