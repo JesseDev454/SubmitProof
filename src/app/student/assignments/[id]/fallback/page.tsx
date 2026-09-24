@@ -36,6 +36,7 @@ export default function FallbackPage() {
     commitmentToken,
     setCommitmentToken,
     setNonce,
+    setCommittedAt,
     setUploadProgress,
     setUploadError,
   } = useSubmissionFlow();
@@ -77,6 +78,7 @@ export default function FallbackPage() {
           const data = await res.json();
           setCommitmentToken(data.commitmentToken);
           setNonce(data.nonce);
+          setCommittedAt(new Date().toISOString());
           setUsingPlaceholderToken(false);
         } else {
           throw new Error("Failed to init fallback");
@@ -86,6 +88,7 @@ export default function FallbackPage() {
         console.warn("Fallback init failed/timed out, generating local placeholder", err);
         setCommitmentToken(generatePlaceholderToken(assignment.course_code, assignment.id));
         setNonce("nonce-placeholder-12345");
+        setCommittedAt(new Date().toISOString());
         setUsingPlaceholderToken(true);
       } finally {
         setIsLoadingToken(false);
@@ -93,7 +96,7 @@ export default function FallbackPage() {
     };
 
     fetchToken();
-  }, [file, fileHash, assignment.id, assignment.course_code, commitmentToken, setCommitmentToken, setNonce]);
+  }, [file, fileHash, assignment.id, assignment.course_code, commitmentToken, setCommitmentToken, setNonce, setCommittedAt]);
 
   if (!file || !fileHash) {
     return null; // Don't render until redirect happens
