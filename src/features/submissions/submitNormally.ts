@@ -1,3 +1,5 @@
+import { uploadWithProgress } from "./uploadWithProgress";
+
 export interface SubmitNormallyArgs {
   file: File;
   assignmentId: string;
@@ -25,34 +27,22 @@ export function submitNormally({
   formData.append("assignmentId", assignmentId);
   formData.append("clientHash", fileHash);
 
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/api/submissions/normal", true);
-  
-  // Timeout to prevent hanging connections
-  xhr.timeout = 15000;
-
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const percentComplete = (e.loaded / e.total) * 100;
-      onProgress(percentComplete);
+  uploadWithProgress({
+    url: "/api/submissions/normal",
+    formData,
+    onProgress,
+    onSuccess: () => onSuccess(),
+    onError: (msg) => {
+      // Keep the original error suffix behavior for fallback routing
+      if (msg.includes("Server error")) {
+        onError(`${msg} Falling back...`);
+      } else if (msg.includes("Network error")) {
+        onError(`${msg} Falling back...`);
+      } else if (msg.includes("Connection timed out")) {
+        onError(`${msg} Falling back...`);
+      } else {
+        onError(`${msg} Falling back...`);
+      }
     }
-  };
-
-  xhr.onload = () => {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      onSuccess();
-    } else {
-      onError(`Server error (${xhr.status}). Falling back...`);
-    }
-  };
-
-  xhr.onerror = () => {
-    onError("Network error during submission. Falling back...");
-  };
-
-  xhr.ontimeout = () => {
-    onError("Connection timed out. Falling back...");
-  };
-
-  xhr.send(formData);
+  });
 }
