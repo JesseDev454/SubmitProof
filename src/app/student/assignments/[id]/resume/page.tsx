@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSubmissionFlow } from "@/features/submissions/SubmissionFlowContext";
 import { useFileHasher, FileDropzone } from "@/features/submissions/useFileHasher";
-import { getUploadIdempotencyKey, uploadSubmission, type FinalizedUpload } from "@/features/submissions/uploadSubmission";
+import { clearUploadIdempotencyKey, getUploadIdempotencyKey, uploadSubmission, type FinalizedUpload } from "@/features/submissions/uploadSubmission";
 import { createClient } from "@/lib/auth/client";
 
 type Commitment = {
@@ -84,6 +84,7 @@ export default function ResumeUploadPage() {
         },
         onStage: setUploadStage,
       });
+      clearUploadIdempotencyKey(assignment.id, "fallback", selectedHash);
       setResult(finalized);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "The upload could not be verified.");

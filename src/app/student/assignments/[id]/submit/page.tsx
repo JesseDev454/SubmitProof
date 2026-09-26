@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSubmissionFlow } from "@/features/submissions/SubmissionFlowContext";
 import { createClient } from "@/lib/auth/client";
-import { getUploadIdempotencyKey, uploadSubmission } from "@/features/submissions/uploadSubmission";
+import { clearUploadIdempotencyKey, getUploadIdempotencyKey, uploadSubmission } from "@/features/submissions/uploadSubmission";
 import { useFileHasher, FileDropzone } from "@/features/submissions/useFileHasher";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -97,6 +97,7 @@ export default function SubmitAssignmentPage() {
           setUploadProgress(stage === "reserving" ? 1 : stage === "transferring" ? 2 : 3);
         },
       });
+      clearUploadIdempotencyKey(assignment.id, "normal", fileHash);
       setUploadProgress(100);
       router.push(`/student/assignments/${assignment.id}/receipt`);
     } catch (error) {

@@ -57,6 +57,29 @@ export function getUploadIdempotencyKey(
   }
 }
 
+export function clearUploadIdempotencyKey(
+  assignmentId: string,
+  kind: UploadKind,
+  fileHash: string,
+  storage: Pick<Storage, 'removeItem'> | undefined = undefined,
+): void {
+  const storageKey = `submitproof:upload:${assignmentId}:${kind}:${fileHash}`
+  memoryIdempotencyKeys.delete(storageKey)
+  if (!storage) {
+    try {
+      storage = window.sessionStorage
+    } catch {
+      return
+    }
+  }
+
+  try {
+    storage.removeItem(storageKey)
+  } catch {
+    // A blocked sessionStorage is already handled by the in-memory key cache.
+  }
+}
+
 function getMemoryIdempotencyKey(storageKey: string, createKey: () => string): string {
   const existing = memoryIdempotencyKeys.get(storageKey)
   if (existing) return existing

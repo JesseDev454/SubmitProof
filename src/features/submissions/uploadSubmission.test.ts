@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { getUploadIdempotencyKey, uploadSubmission } from './uploadSubmission'
+import { clearUploadIdempotencyKey, getUploadIdempotencyKey, uploadSubmission } from './uploadSubmission'
 
 describe('getUploadIdempotencyKey', () => {
   it('reuses one key for a retry of the same assignment, kind, and file', () => {
@@ -36,6 +36,23 @@ describe('getUploadIdempotencyKey', () => {
     expect(first).toBe('memory-key-1')
     expect(retry).toBe(first)
     expect(createKey).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts a fresh idempotency key after a completed upload attempt', () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    }
+    const createKey = vi.fn().mockReturnValueOnce('attempt-1').mockReturnValueOnce('attempt-2')
+
+    const first = getUploadIdempotencyKey('assignment-1', 'normal', 'a'.repeat(64), storage, createKey)
+    clearUploadIdempotencyKey('assignment-1', 'normal', 'a'.repeat(64), storage)
+    const nextAttempt = getUploadIdempotencyKey('assignment-1', 'normal', 'a'.repeat(64), storage, createKey)
+
+    expect(first).toBe('attempt-1')
+    expect(nextAttempt).toBe('attempt-2')
   })
 })
 
