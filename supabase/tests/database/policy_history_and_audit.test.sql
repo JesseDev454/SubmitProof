@@ -7,7 +7,8 @@ insert into auth.users (
   raw_app_meta_data, raw_user_meta_data, created_at, updated_at
 ) values
   ('30000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'history-lecturer@example.test', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
-  ('30000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'history-student@example.test', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
+  ('30000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'history-student@example.test', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+  ('30000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'history-outsider@example.test', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
 
 update public.profiles set role = 'lecturer' where id = '30000000-0000-4000-8000-000000000001';
 update public.profiles
@@ -83,6 +84,22 @@ insert into public.assignment_policy_versions (
 update public.assignments
 set current_policy_version_id = '33000000-0000-4000-8000-000000000002'
 where id = '32000000-0000-4000-8000-000000000001';
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000002', true);
+select is(
+  (select count(*)::integer from public.assignment_policy_versions where id = '33000000-0000-4000-8000-000000000001'),
+  1,
+  'a student with a recorded commitment can read its historical policy version'
+);
+
+select set_config('request.jwt.claim.sub', '30000000-0000-4000-8000-000000000003', true);
+select is(
+  (select count(*)::integer from public.assignment_policy_versions where id = '33000000-0000-4000-8000-000000000001'),
+  0,
+  'a student without evidence cannot read another student historical policy version'
+);
+reset role;
 
 select is(
   (select version_number from public.assignment_policy_versions where id = '33000000-0000-4000-8000-000000000001'),

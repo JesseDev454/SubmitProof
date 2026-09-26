@@ -1,16 +1,11 @@
 import Link from "next/link";
 
-export default function SignupPage() {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-      <h1 className="text-2xl font-bold text-slate-900">Create a Student Account</h1>
-      <p className="mt-2 text-slate-600">Coming soon</p>
-      <Link
-        href="/login"
-        className="mt-6 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
-      >
-        ← Back to sign in
-      </Link>
-    </div>
-  );
+export default function SignupUnavailablePage() {
+  return <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+    <section className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <h1 className="text-xl font-bold text-slate-900">Account creation is unavailable</h1>
+      <p className="mt-2 text-sm text-slate-600">SubmitProof accounts are provisioned by your institution during this release.</p>
+      <Link href="/login" className="mt-5 inline-flex font-semibold text-blue-700 hover:underline">Return to sign in</Link>
+    </section>
+  </main>
 }

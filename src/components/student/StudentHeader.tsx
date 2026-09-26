@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 interface StudentHeaderProps {
   displayName?: string;
   subtitle?: string;
@@ -21,7 +23,7 @@ export function StudentHeader({
 
   return (
     <header className="sticky top-0 z-20 h-18 bg-white/95 backdrop-blur-xs border-b border-slate-100 px-6 sm:px-8 flex items-center justify-between">
-      {/* Search Input (Visual only, non-functional) */}
+      {/* Search is not part of the current release. */}
       <div className="w-full max-w-md">
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -40,20 +42,23 @@ export function StudentHeader({
           </div>
           <input
             type="text"
-            readOnly
-            placeholder="Search assignments, courses, or receipts..."
-            className="w-full rounded-xl border border-slate-200/80 bg-slate-50/60 py-2 pl-10 pr-4 text-xs sm:text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none cursor-default shadow-2xs"
+            aria-label="Search is not available yet"
+            disabled
+            placeholder="Search is not available yet"
+            className="w-full cursor-not-allowed rounded-xl border border-slate-200/80 bg-slate-50/60 py-2 pl-10 pr-4 text-xs text-slate-400 shadow-2xs sm:text-sm"
           />
         </div>
       </div>
 
       {/* Right: Notifications & User Menu */}
       <div className="flex items-center gap-4 sm:gap-6">
-        {/* Notification Bell */}
+        {/* Notification inbox is not part of the current release. */}
         <button
           type="button"
-          aria-label="Notifications"
-          className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+          aria-label="Notifications are not available yet"
+          disabled
+          title="Notifications are not available yet"
+          className="relative cursor-not-allowed rounded-xl p-2 text-slate-300"
         >
           <svg
             className="w-5 h-5"
@@ -67,12 +72,10 @@ export function StudentHeader({
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          {/* Red notification dot */}
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
         </button>
 
         {/* User Profile Menu */}
-        <div className="flex items-center gap-3 pl-2 border-l border-slate-100 cursor-pointer group">
+        <Link href="/student/profile" className="group flex items-center gap-3 border-l border-slate-100 pl-2">
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -106,7 +109,7 @@ export function StudentHeader({
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-        </div>
+        </Link>
       </div>
     </header>
   );

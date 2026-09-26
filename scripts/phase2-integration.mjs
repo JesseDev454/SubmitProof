@@ -208,6 +208,12 @@ try {
   })
   assert.equal(published.response.status, 200, JSON.stringify(published.payload))
 
+  const noSubmission = await api(`/api/assignments/${assignmentId}/my-submission`, { cookie: studentCookie })
+  assert.equal(noSubmission.response.status, 200, JSON.stringify(noSubmission.payload))
+  assert.equal(noSubmission.payload.data, null)
+  const outsiderSubmission = await api(`/api/assignments/${assignmentId}/my-submission`, { cookie: outsiderStudentCookie })
+  assert.equal(outsiderSubmission.response.status, 404)
+
   const frozenPolicy = await api(`/api/assignments/${assignmentId}`, {
     cookie: lecturerCookie,
     method: 'PATCH',
@@ -227,7 +233,7 @@ try {
     body: { rotate: false },
   })
   assert.equal(tokenResponse.response.status, 201, JSON.stringify(tokenResponse.payload))
-  const token = tokenResponse.payload.data.token
+  let token = tokenResponse.payload.data.token
   assert.equal(token.length, 43)
   const tokenHash = createHash('sha256').update(token).digest('hex')
   const { data: storedToken, error: tokenError } = await admin
@@ -238,6 +244,29 @@ try {
   if (tokenError) throw tokenError
   assert.equal(storedToken.token_hash, tokenHash)
   assert.notEqual(storedToken.token_hash, token)
+
+  const tokenWithoutRotation = await api(`/api/assignments/${assignmentId}/fallback-token`, {
+    cookie: studentCookie,
+    method: 'POST',
+    body: { rotate: false },
+  })
+  assert.equal(tokenWithoutRotation.response.status, 409)
+  assert.equal(tokenWithoutRotation.payload.error.code, 'token_rotation_required')
+
+  const rotatedToken = await api(`/api/assignments/${assignmentId}/fallback-token`, {
+    cookie: studentCookie,
+    method: 'POST',
+    body: { rotate: true },
+  })
+  assert.equal(rotatedToken.response.status, 201, JSON.stringify(rotatedToken.payload))
+  const { data: revokedToken, error: revokedTokenError } = await admin
+    .from('assignment_tokens')
+    .select('revoked_at')
+    .eq('id', tokenResponse.payload.data.tokenId)
+    .single()
+  if (revokedTokenError) throw revokedTokenError
+  assert.ok(revokedToken.revoked_at)
+  token = rotatedToken.payload.data.token
 
   const firstFile = Buffer.from('%PDF-1.7\nSubmitProof integration file one\n%%EOF\n')
   const firstHash = createHash('sha256').update(firstFile).digest('hex')
@@ -251,6 +280,11 @@ try {
   })
   assert.equal(accepted.response.status, 201, JSON.stringify(accepted.payload))
   assert.equal(accepted.payload.data.provider, 'simulated')
+
+  const committedEvidence = await api(`/api/assignments/${assignmentId}/my-submission`, { cookie: studentCookie })
+  assert.equal(committedEvidence.response.status, 200, JSON.stringify(committedEvidence.payload))
+  assert.equal(committedEvidence.payload.data.commitments[0].provider, 'simulated')
+  assert.equal('token_hash' in committedEvidence.payload.data.commitments[0], false)
 
   const duplicate = await api('/api/dev/simulate-sms', {
     cookie: studentCookie,
@@ -301,6 +335,18 @@ try {
   })
   assert.equal(completed.evidence.verificationResult, 'match')
   assert.equal(completed.evidence.policyResult, 'qualifies')
+
+  const finalizedEvidence = await api(`/api/assignments/${assignmentId}/my-submission`, { cookie: studentCookie })
+  assert.equal(finalizedEvidence.response.status, 200, JSON.stringify(finalizedEvidence.payload))
+  assert.equal(finalizedEvidence.payload.data.uploads[0].verification_result, 'match')
+  assert.equal(finalizedEvidence.payload.data.uploads[0].policy_result, 'qualifies')
+  assert.equal('storage_object_path' in finalizedEvidence.payload.data.uploads[0], false)
+  const download = await api(`/api/uploads/${finalizedEvidence.payload.data.uploads[0].id}/download`, { cookie: studentCookie })
+  assert.equal(download.response.status, 200, JSON.stringify(download.payload))
+  assert.equal(typeof download.payload.data.url, 'string')
+  assert.equal(download.payload.data.expiresInSeconds, 60)
+  const outsiderDownload = await api(`/api/uploads/${finalizedEvidence.payload.data.uploads[0].id}/download`, { cookie: outsiderStudentCookie })
+  assert.equal(outsiderDownload.response.status, 404)
 
   const retryCompletion = await api(`/api/uploads/${completed.reservation.reservationId}/complete`, {
     cookie: studentCookie,

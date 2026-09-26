@@ -12,6 +12,7 @@ export interface AssignmentContextData {
   max_file_size_bytes: number;
   fallback_enabled: boolean;
   grace_period_minutes: number;
+  assignment_status: "draft" | "published" | "closed";
   description?: string | null;
 }
 
@@ -29,8 +30,6 @@ interface SubmissionFlowState {
   setCommitmentToken: (token: string | null) => void;
   nonce: string | null;
   setNonce: (nonce: string | null) => void;
-  committedAt: string | null;
-  setCommittedAt: (date: string | null) => void;
 }
 
 const SubmissionFlowContext = createContext<SubmissionFlowState | null>(null);
@@ -48,7 +47,6 @@ export function SubmissionFlowProvider({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [commitmentToken, setCommitmentToken] = useState<string | null>(null);
   const [nonce, setNonce] = useState<string | null>(null);
-  const [committedAt, setCommittedAt] = useState<string | null>(null);
 
   return (
     <SubmissionFlowContext.Provider
@@ -66,8 +64,6 @@ export function SubmissionFlowProvider({
         setCommitmentToken,
         nonce,
         setNonce,
-        committedAt,
-        setCommittedAt,
       }}
     >
       {children}

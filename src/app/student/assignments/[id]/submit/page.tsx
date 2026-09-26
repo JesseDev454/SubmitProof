@@ -4,7 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSubmissionFlow } from "@/features/submissions/SubmissionFlowContext";
-import { submitNormally as submitNormallyHelper } from "@/features/submissions/submitNormally";
+import { createClient } from "@/lib/auth/client";
+import { getUploadIdempotencyKey, uploadSubmission } from "@/features/submissions/uploadSubmission";
 import { useFileHasher, FileDropzone } from "@/features/submissions/useFileHasher";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export default function SubmitAssignmentPage() {
   } = useSubmissionFlow();
 
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState<"reserving" | "transferring" | "verifying" | null>(null);
 
   const {
     isHashing,
@@ -64,29 +66,44 @@ export default function SubmitAssignmentPage() {
     },
   });
 
-  const submitNormally = () => {
+  const submitNormally = async () => {
     if (!file || !fileHash) return;
+    if (assignment.assignment_status !== "published") {
+      setUploadError("This assignment is closed and is not accepting a new normal upload.");
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
     setUploadError(null);
+    setUploadStage("reserving");
 
-    submitNormallyHelper({
-      file,
-      assignmentId: assignment.id,
-      fileHash,
-      onProgress: (percent) => setUploadProgress(percent),
-      onSuccess: () => {
-        setIsUploading(false);
-        // TODO: route to submission receipt once it exists
-        router.push("/student");
-      },
-      onError: (errorMsg) => {
-        setIsUploading(false);
-        setUploadError(errorMsg);
-        router.push(`/student/assignments/${assignment.id}/fallback`);
-      }
-    });
+    try {
+      const supabase = createClient();
+      const idempotencyKey = getUploadIdempotencyKey(assignment.id, "normal", fileHash);
+      await uploadSubmission({
+        assignmentId: assignment.id,
+        file,
+        kind: "normal",
+        idempotencyKey,
+        transfer: async (path, token, selectedFile) => {
+          const { error } = await supabase.storage
+            .from("submission-files")
+            .uploadToSignedUrl(path, token, selectedFile, { contentType: selectedFile.type, upsert: false });
+          return { error };
+        },
+        onStage: (stage) => {
+          setUploadStage(stage);
+          setUploadProgress(stage === "reserving" ? 1 : stage === "transferring" ? 2 : 3);
+        },
+      });
+      setUploadProgress(100);
+      router.push(`/student/assignments/${assignment.id}/receipt`);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "The upload could not be completed.");
+      setIsUploading(false);
+      setUploadStage(null);
+    }
   };
 
   return (
@@ -152,7 +169,7 @@ export default function SubmitAssignmentPage() {
             <p className="text-sm text-slate-500 mb-4">Select your completed assignment file to submit.</p>
 
             {uploadError && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700 flex items-start gap-2">
+              <div role="alert" className="mb-4 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700 flex items-start gap-2">
                 <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
@@ -182,18 +199,16 @@ export default function SubmitAssignmentPage() {
             {isUploading && (
               <div className="mt-6 flex flex-col gap-2">
                 <div className="flex justify-between items-end text-xs font-semibold text-slate-700">
-                  <span>Uploading...</span>
-                  <span>{Math.round(uploadProgress)}%</span>
+                  <span aria-live="polite">{uploadStage === "reserving" ? "Preparing secure upload" : uploadStage === "transferring" ? "Transferring file" : "Verifying upload"}</span>
+                  <span>Step {Math.max(1, Math.round(uploadProgress))} of 3</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div 
                     className="bg-blue-600 h-full rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
+                    style={{ width: `${Math.max(1, Math.round(uploadProgress)) * 33.333}%` }}
                   />
                 </div>
-                <div className="text-[10px] text-slate-400 text-right">
-                  Uploading your file securely to SubmitProof...
-                </div>
+                <div className="text-[10px] text-slate-400 text-right">Your file goes directly to private storage. Verification starts after transfer.</div>
               </div>
             )}
 
@@ -201,7 +216,7 @@ export default function SubmitAssignmentPage() {
             <div className="mt-6">
               <button
                 onClick={submitNormally}
-                disabled={!file || !fileHash || isHashing || isUploading}
+                disabled={!file || !fileHash || isHashing || isUploading || assignment.assignment_status !== "published"}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-semibold py-3.5 px-5 rounded-xl text-sm shadow-sm transition-all"
               >
                 {isUploading ? (
@@ -225,7 +240,9 @@ export default function SubmitAssignmentPage() {
             
             {/* Fallback Helper Link */}
             <div className="mt-4 text-center">
-              {(!file || !fileHash) ? (
+              {assignment.assignment_status !== "published" ? (
+                <span className="text-xs text-slate-400">This assignment is closed; no new fallback commitment can be recorded.</span>
+              ) : (!file || !fileHash) ? (
                 <span className="text-xs text-slate-400">
                   If you can&apos;t submit due to connectivity issues, you can use fallback submission →
                 </span>
