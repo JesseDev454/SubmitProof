@@ -170,7 +170,7 @@ test('a failed upload reservation stays on the form and shows the API error', as
   })
 
   await page.getByRole('button', { name: 'Submit Normally' }).click()
-  await expect(page.getByRole('alert')).toContainText('Upload reservation is temporarily unavailable.')
+  await expect(page.getByText('Upload reservation is temporarily unavailable.', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Submit Assignment' })).toBeVisible()
   await expect(page).not.toHaveURL(/\/receipt$/)
 })
