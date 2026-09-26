@@ -1,105 +1,78 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/auth/client'
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+
+import { createClient } from "@/lib/auth/client";
+import { loginSchema } from "@/lib/validation/auth";
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-
-    const supabase = createClient()
-
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (authError || !authData.user) {
-      setError(authError?.message ?? 'Login failed')
-      setLoading(false)
-      return
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setErrorMessage(null);
+    const validation = loginSchema.safeParse({ email: email.trim(), password });
+    if (!validation.success) {
+      setErrorMessage(validation.error.issues[0]?.message ?? "Enter a valid email and password.");
+      return;
     }
 
-    // Fetch profile role — default to /student if anything fails
-    let destination = '/student'
+    setIsSubmitting(true);
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-
-      if (profile?.role === 'lecturer') {
-        destination = '/lecturer'
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithPassword(validation.data);
+      if (error || !data.user) {
+        setErrorMessage(error?.message ?? "Sign in could not be completed.");
+        setIsSubmitting(false);
+        return;
       }
-    } catch {
-      // swallow — fall back to /student
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      if (profileError || !profile) {
+        await supabase.auth.signOut();
+        setErrorMessage("Your account role could not be loaded. Contact your institution administrator.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      router.replace(profile.role === "lecturer" ? "/lecturer" : "/student");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Sign in could not be completed.");
+      setIsSubmitting(false);
     }
+  };
 
-    router.push(destination)
-  }
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm border border-gray-200">
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <span className="text-lg font-bold text-gray-900">SubmitProof</span>
-        </div>
-
-        <h1 className="mb-1 text-2xl font-bold text-gray-900">Sign in</h1>
-        <p className="mb-6 text-sm text-gray-500">Your work. Always counts.</p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="you@university.edu"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
-          >
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+  return <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
+    <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9">
+      <div className="mb-7">
+        <p className="text-sm font-bold text-blue-700">SubmitProof</p>
+        <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Sign in</h1>
+        <p className="mt-2 text-sm text-slate-600">Students and lecturers use their institution account. Your profile role determines which workspace opens.</p>
       </div>
-    </main>
-  )
+
+      <form onSubmit={signIn} className="flex flex-col gap-4">
+        <div>
+          <label htmlFor="email" className="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
+          <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3.5 py-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+        </div>
+        <div>
+          <label htmlFor="password" className="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
+          <input id="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3.5 py-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+          <p className="mt-1.5 text-xs text-slate-500">Password recovery and institution SSO are not enabled yet.</p>
+        </div>
+        {errorMessage && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{errorMessage}</p>}
+        <button type="submit" disabled={isSubmitting} className="mt-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? "Signing in…" : "Sign in"}</button>
+      </form>
+      <p className="mt-6 text-center text-xs text-slate-500">Accounts are provisioned by your institution.</p>
+    </section>
+  </main>
 }
