@@ -68,11 +68,11 @@ export default function LandingPage() {
               <div>
                 <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-4">
                   Protect your assignment deadlines —{' '}
-                  <span className="text-blue-600">even when you're offline.</span>
+                  <span className="text-blue-600">even when you&apos;re offline.</span>
                 </h1>
                 <p className="text-lg text-gray-600 leading-relaxed">
                   SubmitProof lets you commit your work during poor connectivity and get a tamper-evident receipt.
-                  When you're back online, we verify and match your submission — so your hard work always counts.
+                  When you&apos;re back online, we verify and match your submission — so your hard work always counts.
                 </p>
               </div>
 
@@ -182,7 +182,7 @@ export default function LandingPage() {
                 {/* Quote callout */}
                 <div className="absolute -bottom-8 -right-4 max-w-xs rounded-lg bg-white p-3 shadow-md border border-gray-100">
                   <p className="text-xs text-gray-600 italic">
-                    "Different connections. Same opportunities."
+                    &quot;Different connections. Same opportunities.&quot;
                   </p>
                   <p className="text-xs font-semibold text-gray-900 mt-1">— SubmitProof</p>
                 </div>
@@ -263,7 +263,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-lg font-bold text-gray-900">Verify Later</h3>
               <p className="mt-2 text-sm text-gray-600">
-                When you're back online, we automatically match your file to confirm it's the same submission — no surprises.
+                When you&apos;re back online, we automatically match your file to confirm it&apos;s the same submission — no surprises.
               </p>
             </div>
 

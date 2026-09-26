@@ -57,7 +57,7 @@ export default function NotFoundContent({
           Looks like this page took a different path.
         </p>
         <p className="text-sm text-gray-500">
-          The page you're looking for might have been moved, deleted, or the link might be incorrect. No worries — let's get you back on track.
+          The page you&apos;re looking for might have been moved, deleted, or the link might be incorrect. No worries — let&apos;s get you back on track.
         </p>
       </div>
 
@@ -100,9 +100,9 @@ export default function NotFoundContent({
       {/* Closing quote */}
       <div className="mt-8 text-center text-sm text-gray-500">
         <p className="italic">
-          "Different connections.
+          &quot;Different connections.
           <br />
-          Same opportunities."
+          Same opportunities.&quot;
         </p>
         <p className="font-semibold text-gray-700 mt-1">— SubmitProof</p>
       </div>

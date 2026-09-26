@@ -515,9 +515,9 @@ export default function ProfileSettingsForm({
       {/* Closing quote */}
       <div className="text-center space-y-2 pt-4">
         <p className="text-sm text-gray-600 italic">
-          "A more organized you,
+          &quot;A more organized you,
           <br />
-          a brighter tomorrow."
+          a brighter tomorrow.&quot;
         </p>
         <p className="text-xs font-semibold text-gray-700">— SubmitProof</p>
       </div>
