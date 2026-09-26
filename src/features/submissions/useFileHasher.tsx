@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { isAllowedFileType } from "./fileType";
 
 function formatFileSizeMb(bytes: number): string {
   const mb = bytes / (1024 * 1024);
@@ -45,12 +46,9 @@ export function useFileHasher({
       return;
     }
 
-    if (allowedTypes.length > 0) {
-      const ext = "." + selectedFile.name.split(".").pop()?.toLowerCase();
-      if (!allowedTypes.some((allowed) => allowed.toLowerCase() === ext)) {
-        setLocalError(`Invalid file format. Allowed: ${allowedFormatsStr}.`);
-        return;
-      }
+    if (!isAllowedFileType(selectedFile, allowedTypes)) {
+      setLocalError(`Invalid file format. Allowed: ${allowedFormatsStr}.`);
+      return;
     }
 
     onFileSelect(selectedFile);

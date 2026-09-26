@@ -80,7 +80,8 @@ test.beforeAll(async () => {
   outsider = await createUser('outsider')
   const { error: promoteError } = await admin.from('profiles').update({ role: 'lecturer' }).eq('id', lecturer.id)
   if (promoteError) throw promoteError
-  const { error: phoneError } = await admin.from('profiles').update({ phone_e164: '+2348012345678' }).eq('id', student.id)
+  const randomPhoneSuffix = String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, '0')
+  const { error: phoneError } = await admin.from('profiles').update({ phone_e164: `+234${randomPhoneSuffix}` }).eq('id', student.id)
   if (phoneError) throw phoneError
 
   const { data: course, error: courseError } = await admin.from('courses').insert({
