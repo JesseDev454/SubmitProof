@@ -75,7 +75,7 @@ export default function ResumeUploadPage() {
         if (!res.ok) throw new Error("Not found");
         const data = await res.json();
         setCommitment(data);
-      } catch (err) {
+      } catch {
         // Fallback to Context
         if (ctxToken && ctxHash && ctxFile) {
           setCommitment({

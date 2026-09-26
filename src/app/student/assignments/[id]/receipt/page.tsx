@@ -3,6 +3,49 @@ import Link from "next/link";
 import { createClient } from "@/lib/auth/server";
 import { PrintButton } from "./PrintButton";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type JsonMetadata = Record<string, string | number | boolean | null | undefined>;
+
+interface ReceiptSubmission {
+  id: string;
+  status: string;
+  file_hash?: string;
+  uploaded_hash?: string;
+  file_name: string;
+  file_size: number;
+  file_type?: string;
+  storage_path?: string;
+  matched_commitment_id?: string;
+  uploaded_at?: string;
+  created_at: string;
+  policy_result?: string;
+  verification_result?: string;
+}
+
+interface ReceiptAssignment {
+  title: string;
+  description?: string | null;
+  deadline_at: string;
+  course_code: string;
+  course_name: string;
+  lecturer_name: string;
+}
+
+interface ReceiptCommitment {
+  id: string;
+  committed_at: string;
+  file_hash: string;
+  commitment_token?: string;
+}
+
+interface AuditEvent {
+  id: string;
+  event_type: string;
+  event_at: string;
+  metadata_json?: JsonMetadata;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatFileSizeMb(bytes: number): string {
@@ -37,11 +80,11 @@ function getEventLabel(type: string): string {
   return map[type] || type;
 }
 
-function getEventDescription(type: string, metadata: any): string {
+function getEventDescription(type: string, metadata: JsonMetadata | null | undefined): string {
   const m = metadata || {};
   switch (type) {
     case "FILE_SELECTED":
-      return `You selected "${m.fileName || 'file'}" (${m.fileSize ? formatFileSizeMb(m.fileSize) : 'unknown size'}) for submission.`;
+      return `You selected "${m.fileName || 'file'}" (${m.fileSize !== undefined ? formatFileSizeMb(Number(m.fileSize)) : 'unknown size'}) for submission.`;
     case "LOCAL_HASH_GENERATED":
       return "A SHA-256 fingerprint was generated on your device.";
     case "SMS_COMMITMENT_RECEIVED":
@@ -55,7 +98,7 @@ function getEventDescription(type: string, metadata: any): string {
     case "HASH_VERIFICATION_FAILED":
       return "The uploaded file did not match your committed fingerprint.";
     default:
-      return m.description || "System event recorded.";
+      return (m.description ? String(m.description) : null) || "System event recorded.";
   }
 }
 
@@ -67,12 +110,12 @@ export default async function SubmissionReceiptPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  let notFound = false;
+  const notFound = false;
 
-  let submission: any = null;
-  let assignment: any = null;
-  let commitment: any = null;
-  let auditEvents: any[] = [];
+  let submission: ReceiptSubmission | null = null;
+  let assignment: ReceiptAssignment | null = null;
+  let commitment: ReceiptCommitment | null = null;
+  let auditEvents: AuditEvent[] = [];
 
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     try {
@@ -159,6 +202,27 @@ export default async function SubmissionReceiptPage({
         <h1 className="text-xl font-bold text-slate-900">No submission on record yet</h1>
         <p className="text-sm text-slate-500 max-w-xs">
           We couldn&apos;t find a submission for this assignment.
+        </p>
+        <Link
+          href={`/student/assignments/${id}`}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+          </svg>
+          Back to Assignment
+        </Link>
+      </div>
+    );
+  }
+
+  // After the early return above, TypeScript needs explicit guards to narrow nullability
+  if (!submission || !assignment) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 gap-4">
+        <h1 className="text-xl font-bold text-slate-900">Could not load submission details</h1>
+        <p className="text-sm text-slate-500 max-w-xs">
+          The submission exists but some details couldn&apos;t be loaded. Please try again.
         </p>
         <Link
           href={`/student/assignments/${id}`}
