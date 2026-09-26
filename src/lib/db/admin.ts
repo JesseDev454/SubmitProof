@@ -1,7 +1,10 @@
-// NEVER import into a client component.
+import 'server-only'
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-export function createAdminClient(): SupabaseClient {
+import type { Database } from '@/types/database.types'
+
+export function createAdminClient(): SupabaseClient<Database> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -9,7 +12,7 @@ export function createAdminClient(): SupabaseClient {
     throw new Error('Missing Supabase admin environment variables')
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -17,7 +20,7 @@ export function createAdminClient(): SupabaseClient {
   })
 }
 
-export const adminClient = new Proxy({} as SupabaseClient, {
+export const adminClient = new Proxy({} as SupabaseClient<Database>, {
   get(_target, prop) {
     const client = createAdminClient()
     const value = Reflect.get(client, prop)
