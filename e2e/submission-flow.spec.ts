@@ -56,6 +56,7 @@ async function signIn(page: Page, user: TestUser) {
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(user.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/student$/)
 }
 
 async function choosePdf(page: Page, name: string, bytes: string) {
@@ -138,6 +139,7 @@ test('student records a normal upload and a simulated commitment, then verifies 
   await expect(page.getByText('match', { exact: true })).toBeVisible()
   await expect(page.getByText('qualifies', { exact: true })).toBeVisible()
 
+  await page.getByRole('button', { name: 'Remove file' }).click()
   await choosePdf(page, 'different.pdf', '%PDF-1.7\ndifferent bytes\n%%EOF\n')
   await page.getByRole('button', { name: 'Upload and verify' }).click()
   await expect(page.getByRole('heading', { name: 'Upload recorded' })).toBeVisible()
@@ -148,8 +150,10 @@ test('student records a normal upload and a simulated commitment, then verifies 
   await expect(page.getByRole('heading', { name: 'Submission receipt' })).toBeVisible()
   const viewFile = page.getByRole('button', { name: 'View file' })
   await expect(viewFile).toBeVisible()
+  const downloadPromise = page.waitForEvent('download')
   await viewFile.click()
-  await expect(page).toHaveURL(/\/storage\/v1\/object\/sign\/submission-files\//)
+  const download = await downloadPromise
+  expect(await download.failure()).toBeNull()
 })
 
 test('a failed upload reservation stays on the form and shows the API error', async ({ page }) => {
