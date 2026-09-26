@@ -24,7 +24,9 @@ npm run typecheck
 ```sh
 npm test
 npm run test:integration
+npx playwright install chromium
+npm run test:e2e
 npm run db:uploads:cleanup
 ```
 
-The integration script creates temporary local users and drives the authenticated assignment, simulated commitment, private upload, verification, and lecturer review APIs. It refuses to use a non-local Supabase endpoint. The simulator is for local/test environments only; live SMS transport is not enabled. See [the API contract](docs/API.md), [architecture notes](docs/ARCHITECTURE.md), and [demo steps](docs/DEMO_FLOW.md).
+The integration script creates temporary local users and drives the authenticated assignment, simulated commitment, private upload, verification, and lecturer review APIs. The browser suite exercises the student submission flow end to end. Both suites require the local Supabase stack and refuse to use a non-local Supabase endpoint. The simulator is for local/test environments only; live SMS transport is not enabled. See [the API contract](docs/API.md), [architecture notes](docs/ARCHITECTURE.md), and [demo steps](docs/DEMO_FLOW.md).
