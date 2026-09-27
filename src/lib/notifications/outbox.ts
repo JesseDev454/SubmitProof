@@ -142,8 +142,8 @@ async function finish(
 ) {
   const { error } = await admin.rpc('complete_notification_delivery', {
     p_outbox_id: id,
-    p_provider_message_id: result.providerMessageId ?? null,
-    p_error: result.error ?? null,
+    p_provider_message_id: result.providerMessageId ?? undefined,
+    p_error: result.error ?? undefined,
     p_cancelled: result.cancelled ?? false,
   })
   if (error) throw error

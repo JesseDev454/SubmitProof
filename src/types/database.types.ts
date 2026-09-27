@@ -146,18 +146,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "assignments_course_owner_fk"
-            columns: ["course_id", "created_by"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id", "lecturer_id"]
-          },
-          {
             foreignKeyName: "assignments_archived_by_fkey"
             columns: ["archived_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_course_owner_fk"
+            columns: ["course_id", "created_by"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id", "lecturer_id"]
           },
           {
             foreignKeyName: "assignments_current_policy_version_fk"
@@ -410,39 +410,6 @@ export type Database = {
           },
         ]
       }
-      profiles: {
-        Row: {
-          created_at: string
-          department: string | null
-          email: string | null
-          full_name: string
-          id: string
-          phone_e164: string | null
-          role: Database["public"]["Enums"]["profile_role"]
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          department?: string | null
-          email?: string | null
-          full_name?: string
-          id: string
-          phone_e164?: string | null
-          role?: Database["public"]["Enums"]["profile_role"]
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          department?: string | null
-          email?: string | null
-          full_name?: string
-          id?: string
-          phone_e164?: string | null
-          role?: Database["public"]["Enums"]["profile_role"]
-          updated_at?: string
-        }
-        Relationships: []
-      }
       notification_outbox: {
         Row: {
           attempts: number
@@ -537,6 +504,87 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          department: string | null
+          email: string | null
+          full_name: string
+          id: string
+          phone_e164: string | null
+          role: Database["public"]["Enums"]["profile_role"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          full_name?: string
+          id: string
+          phone_e164?: string | null
+          role?: Database["public"]["Enums"]["profile_role"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          phone_e164?: string | null
+          role?: Database["public"]["Enums"]["profile_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      submission_review_events: {
+        Row: {
+          assignment_id: string
+          decision: Database["public"]["Enums"]["submission_review_decision"]
+          event_at: string
+          id: string
+          reason: string | null
+          reviewer_id: string
+          student_id: string
+          submission_id: string
+        }
+        Insert: {
+          assignment_id: string
+          decision: Database["public"]["Enums"]["submission_review_decision"]
+          event_at?: string
+          id?: string
+          reason?: string | null
+          reviewer_id: string
+          student_id: string
+          submission_id: string
+        }
+        Update: {
+          assignment_id?: string
+          decision?: Database["public"]["Enums"]["submission_review_decision"]
+          event_at?: string
+          id?: string
+          reason?: string | null
+          reviewer_id?: string
+          student_id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_review_events_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submission_review_events_submission_owner_fk"
+            columns: ["submission_id", "assignment_id", "student_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id", "assignment_id", "student_id"]
           },
         ]
       }
@@ -689,54 +737,6 @@ export type Database = {
           },
         ]
       }
-      submission_review_events: {
-        Row: {
-          assignment_id: string
-          decision: Database["public"]["Enums"]["submission_review_decision"]
-          event_at: string
-          id: string
-          reason: string | null
-          reviewer_id: string
-          student_id: string
-          submission_id: string
-        }
-        Insert: {
-          assignment_id: string
-          decision: Database["public"]["Enums"]["submission_review_decision"]
-          event_at?: string
-          id?: string
-          reason?: string | null
-          reviewer_id: string
-          student_id: string
-          submission_id: string
-        }
-        Update: {
-          assignment_id?: string
-          decision?: Database["public"]["Enums"]["submission_review_decision"]
-          event_at?: string
-          id?: string
-          reason?: string | null
-          reviewer_id?: string
-          student_id?: string
-          submission_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "submission_review_events_reviewer_id_fkey"
-            columns: ["reviewer_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "submission_review_events_submission_owner_fk"
-            columns: ["submission_id", "assignment_id", "student_id"]
-            isOneToOne: false
-            referencedRelation: "submissions"
-            referencedColumns: ["id", "assignment_id", "student_id"]
-          },
-        ]
-      }
       submissions: {
         Row: {
           assignment_id: string
@@ -831,17 +831,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      close_assignment: {
-        Args: { p_actor_id: string; p_assignment_id: string }
-        Returns: string
-      }
       archive_closed_assignment: {
         Args: { p_actor_id: string; p_assignment_id: string }
         Returns: string
       }
       claim_notification_outbox: {
         Args: { p_limit?: number }
-        Returns: Database["public"]["Tables"]["notification_outbox"]["Row"][]
+        Returns: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          event_key: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          payload: Json
+          provider_message_id: string | null
+          recipient_email: string
+          recipient_user_id: string | null
+          sent_at: string | null
+          status: string
+          template_key: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      close_assignment: {
+        Args: { p_actor_id: string; p_assignment_id: string }
+        Returns: string
+      }
+      complete_notification_delivery: {
+        Args: {
+          p_cancelled?: boolean
+          p_error?: string
+          p_outbox_id: string
+          p_provider_message_id?: string
+        }
+        Returns: boolean
       }
       complete_upload_reservation: {
         Args: {
@@ -855,10 +886,6 @@ export type Database = {
         }
         Returns: Json
       }
-      complete_notification_delivery: {
-        Args: { p_cancelled?: boolean; p_error?: string | null; p_outbox_id: string; p_provider_message_id?: string | null }
-        Returns: boolean
-      }
       create_assignment: {
         Args: {
           p_actor_id: string
@@ -868,10 +895,6 @@ export type Database = {
           p_title: string
         }
         Returns: string
-      }
-      enqueue_due_submission_reminders: {
-        Args: Record<PropertyKey, never>
-        Returns: number
       }
       create_upload_reservation: {
         Args: {
@@ -884,6 +907,7 @@ export type Database = {
         }
         Returns: Json
       }
+      enqueue_due_submission_reminders: { Args: never; Returns: number }
       issue_assignment_token: {
         Args: {
           p_actor_id: string
@@ -918,7 +942,7 @@ export type Database = {
         Args: {
           p_actor_id: string
           p_decision: Database["public"]["Enums"]["submission_review_decision"]
-          p_reason?: string | null
+          p_reason?: string
           p_submission_id: string
         }
         Returns: string

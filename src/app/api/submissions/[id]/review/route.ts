@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       p_actor_id: actor.id,
       p_submission_id: id,
       p_decision: body.decision,
-      p_reason: body.reason ?? null,
+      p_reason: body.reason ?? undefined,
     })
     if (error) throw error
 
