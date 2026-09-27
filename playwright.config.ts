@@ -42,6 +42,8 @@ const appEnvironment = {
   SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
   ENABLE_SIMULATED_SMS: 'true',
   NEXT_PUBLIC_ENABLE_SIMULATED_SMS: 'true',
+  EMAIL_ADAPTER: 'fake',
+  CRON_SECRET: 'phase2-e2e-cron-secret',
   E2E_SUPABASE_URL: supabaseUrl,
   E2E_SUPABASE_ANON_KEY: anonKey,
   E2E_SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,

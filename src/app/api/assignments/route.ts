@@ -7,10 +7,14 @@ import { createAdminClient } from '@/lib/db/admin'
 export async function GET(request: NextRequest) {
   try {
     const { supabase } = await requireActor(request)
-    const { data: assignments, error } = await supabase
+    let query = supabase
       .from('assignments')
       .select('*')
       .order('created_at', { ascending: false })
+    const archiveFilter = request.nextUrl.searchParams.get('archived')
+    if (archiveFilter === 'true') query = query.not('archived_at', 'is', null)
+    if (archiveFilter === 'false') query = query.is('archived_at', null)
+    const { data: assignments, error } = await query
     if (error) throw error
 
     const policyIds = assignments.flatMap((item) => item.current_policy_version_id ?? [])

@@ -5,6 +5,7 @@ import { ApiError, jsonError, jsonOk, requireActor } from '@/lib/api/http'
 import { createAdminClient } from '@/lib/db/admin'
 import type { Database } from '@/types/database.types'
 import { detectSupportedMimeType } from '@/lib/submissions/commitment'
+import { deliverPendingNotificationEmails } from '@/lib/notifications/outbox'
 
 type RouteContext = { params: Promise<{ id: string }> }
 type Reservation = Database['public']['Tables']['submission_upload_reservations']['Row']
@@ -18,6 +19,7 @@ type CompleteResult = {
 }
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (error) throw error
       if (!existingUpload) throw new ApiError(500, 'evidence_missing', 'Finalized upload evidence is unavailable.')
       await removeStagingObject(admin, reservation.staging_object_path)
+      await tryDeliverQueuedEmails()
       return jsonOk(existingUpload)
     }
     if (reservation.status !== 'reserved') {
@@ -120,9 +123,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     await removeStagingObject(admin, reservation.staging_object_path)
+    await tryDeliverQueuedEmails()
     return jsonOk(result, result.idempotent ? 200 : 201)
   } catch (error) {
     return jsonError(error)
+  }
+}
+
+async function tryDeliverQueuedEmails() {
+  try {
+    await deliverPendingNotificationEmails(25)
+  } catch {
+    // The upload is durable; the scheduled job retries any queued email later.
   }
 }
 

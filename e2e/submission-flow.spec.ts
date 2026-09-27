@@ -14,6 +14,7 @@ let outsider: TestUser
 let normalAssignmentId: string
 let fallbackAssignmentId: string
 let failedUploadAssignmentId: string
+let courseId: string
 
 async function createUser(label: string, claimedRole?: string): Promise<TestUser> {
   const email = `submitproof-e2e-${label}-${randomUUID()}@example.test`
@@ -51,12 +52,12 @@ async function createPublishedAssignment(courseId: string, ownerId: string, titl
   return assignmentId
 }
 
-async function signIn(page: Page, user: TestUser) {
+async function signIn(page: Page, user: TestUser, role: 'student' | 'lecturer' = 'student') {
   await page.goto('/login')
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(user.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/student$/)
+  await expect(page).toHaveURL(new RegExp(`/${role}$`))
 }
 
 async function choosePdf(page: Page, name: string, bytes: string) {
@@ -91,6 +92,7 @@ test.beforeAll(async () => {
     lecturer_id: lecturer.id,
   }).select('id').single()
   if (courseError || !course) throw courseError ?? new Error('Could not create an E2E course.')
+  courseId = course.id
 
   const { error: enrollmentError } = await admin.from('enrollments').insert({
     course_id: course.id,
@@ -179,4 +181,106 @@ test('a different student cannot open another student assignment', async ({ page
   await signIn(page, outsider)
   await page.goto(`/student/assignments/${fallbackAssignmentId}`)
   await expect(page.getByRole('heading', { name: 'Assignment not found' })).toBeVisible()
+})
+
+test('lecturer publishes assignments, reviews evidence, archives, and saves shared profile preferences', async ({ page }) => {
+  await signIn(page, lecturer, 'lecturer')
+  await expect(page.getByRole('heading', { name: /^Welcome/ })).toBeVisible()
+
+  await page.goto('/lecturer/assignments/new')
+  await page.getByLabel('Title').fill('Draft retained after publish failure')
+  await page.getByLabel('Course').selectOption(courseId)
+  await page.getByLabel('Description').fill('This verifies that a publication failure preserves the saved draft.')
+  const deadline = new Date(Date.now() + 48 * 60 * 60_000)
+  const localDeadline = [deadline.getFullYear(), String(deadline.getMonth() + 1).padStart(2, '0'), String(deadline.getDate()).padStart(2, '0')].join('-')
+    + `T${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`
+  await page.getByLabel('Deadline').fill(localDeadline)
+  const publishEndpoint = /\/api\/assignments\/[^/]+\/publish$/
+  await page.route(publishEndpoint, async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'service_unavailable', message: 'Publish is temporarily unavailable.' } }),
+    })
+  })
+  await page.getByRole('button', { name: 'Publish assignment' }).click()
+  await expect(
+    page.locator('div[role="alert"]').filter({ hasText: 'Draft saved, but publishing failed' }),
+  ).toContainText('Draft saved, but publishing failed: Publish is temporarily unavailable.')
+  await page.getByRole('link', { name: 'Open saved draft' }).click()
+  await expect(page.getByRole('heading', { name: 'Draft retained after publish failure' })).toBeVisible()
+  await expect(page.getByText('draft', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Edit draft settings' })).toBeVisible()
+  await page.unroute(publishEndpoint)
+
+  await page.goto('/lecturer/assignments/new')
+  await page.getByLabel('Title').fill('Lecturer published assignment')
+  await page.getByLabel('Course').selectOption(courseId)
+  await page.getByLabel('Description').fill('Published from the lecturer UI.')
+  await page.getByLabel('Deadline').fill(localDeadline)
+  await page.getByRole('button', { name: 'Publish assignment' }).click()
+  await expect(page).toHaveURL(/\/lecturer\/assignments\/[0-9a-f-]+$/)
+  await expect(page.getByRole('heading', { name: 'Lecturer published assignment' })).toBeVisible()
+  await expect(page.getByText('published', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Edit draft settings' })).toHaveCount(0)
+
+  const { data: submission, error: submissionError } = await admin
+    .from('submissions')
+    .select('id')
+    .eq('assignment_id', fallbackAssignmentId)
+    .eq('student_id', student.id)
+    .single()
+  if (submissionError) throw submissionError
+  const { data: uploadsBeforeReview, error: uploadReadError } = await admin
+    .from('submission_uploads')
+    .select('verification_result, policy_result')
+    .eq('submission_id', submission.id)
+    .order('finalized_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (uploadReadError) throw uploadReadError
+
+  await page.goto(`/lecturer/assignments/${fallbackAssignmentId}/submissions/${submission.id}`)
+  await expect(page.getByText('Latest fallback policy result')).toBeVisible()
+  await expect(
+    page.getByText('Latest fallback policy result').locator('..').getByText('does not qualify', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Flag for review' }).click()
+  await page.getByRole('button', { name: 'Confirm flagged' }).click()
+  await expect(page.getByText(/Latest decision: flagged/)).toBeVisible()
+  await page.getByLabel(/Reason/).fill('Checked the file manually against the course instructions.')
+  await page.getByRole('button', { name: 'Accept submission' }).click()
+  await page.getByRole('button', { name: 'Confirm accepted' }).click()
+  await expect(page.getByText(/Latest decision: accepted/)).toBeVisible()
+  const { data: uploadsAfterReview, error: uploadAfterReviewError } = await admin
+    .from('submission_uploads')
+    .select('verification_result, policy_result')
+    .eq('submission_id', submission.id)
+    .order('finalized_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (uploadAfterReviewError) throw uploadAfterReviewError
+  expect(uploadsAfterReview).toEqual(uploadsBeforeReview)
+
+  await page.goto(`/lecturer/assignments/${fallbackAssignmentId}`)
+  await page.getByRole('button', { name: 'Close assignment' }).click()
+  await expect(page.getByText('closed', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Archive closed assignment' }).click()
+  await expect(page.getByText('archived', { exact: true })).toBeVisible()
+  await page.goto('/lecturer/assignments?archived=true')
+  await expect(page.getByRole('heading', { name: 'Browser fallback upload' })).toBeVisible()
+  await page.goto('/lecturer/assignments')
+  await expect(page.getByRole('heading', { name: 'Browser fallback upload' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Archived' })).toBeVisible()
+
+  await page.goto('/lecturer/profile')
+  const phoneSuffix = String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, '0')
+  await page.getByLabel('Phone number').fill(`+2348${phoneSuffix}`)
+  await page.getByRole('button', { name: 'Save profile' }).click()
+  await expect(page.getByRole('status')).toContainText('Profile saved.')
+  await page.getByRole('checkbox', { name: 'Product updates' }).check()
+  await page.getByRole('button', { name: 'Save notification preferences' }).click()
+  await expect(page.getByText('Notification preferences saved.', { exact: true })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: 'Product updates' })).toBeChecked()
 })

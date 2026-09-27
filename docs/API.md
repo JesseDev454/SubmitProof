@@ -16,6 +16,9 @@ Unauthenticated requests return `401`; inaccessible resources return `404`; inva
 | `POST /api/assignments/:id/close` | Lecturer | Closes a published assignment |
 | `GET /api/assignments/:id/submissions` | Lecturer | Lists submissions, commitments, and upload results for the owned assignment |
 | `GET /api/assignments/:id/my-submission` | Enrolled student | Returns `{ "data": null }` before a submission exists; otherwise returns the student's submission, commitments, uploads, and readable policy snapshots. Token hashes, raw tokens, and storage object paths are omitted. |
+| `POST /api/assignments/:id/archive` | Owning lecturer | Archives a closed assignment and appends an audit event; repeated calls are idempotent |
+
+`GET /api/assignments?archived=true` lists archived assignments for the caller. `?archived=false` lists unarchived assignments. With no `archived` filter, the prior unfiltered behavior is retained.
 
 Create an assignment with:
 
@@ -68,6 +71,17 @@ The completion result keeps `verificationResult` (`match`, `mismatch`, or `not_a
 | `GET /api/submissions/:id` | Student or owning lecturer | Reads the authorized submission and evidence |
 | `GET /api/submissions/:id/audit` | Student or owning lecturer | Reads the related audit events |
 | `GET /api/uploads/:id/download` | Student who owns the upload or owning lecturer | Returns a 60-second signed download URL for finalized evidence only |
+| `POST /api/submissions/:id/review` | Owning lecturer | Appends a separate `accepted` or `flagged` human decision and audit event. Accepting an upload that does not qualify under policy requires a reason; a flagged item can later be accepted. Stored verification and policy results are unchanged. |
+
+`GET /api/profile/notifications` reads the signed-in user's preferences; `PATCH /api/profile/notifications` updates that user's four email preferences. `PATCH /api/profile` updates only the signed-in user's name, department, and E.164 phone. Password changes use Supabase Auth directly in the shared profile form.
+
+`GET /api/cron/notifications` requires `Authorization: Bearer $CRON_SECRET`. It transactionally enqueues opted-in reminders for enrolled students with no finalized upload when the published assignment deadline is within 24 hours, then drains a bounded batch of the email outbox. Provider failures remain retryable. Configure the daily schedule in `vercel.json`; set `CRON_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `NEXT_PUBLIC_APP_URL` in deployment settings. `EMAIL_ADAPTER=fake` is permitted only outside production.
+
+The controlled real-provider smoke test reads `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `RESEND_TEST_RECIPIENT` from the environment and sends only to that designated mailbox:
+
+```sh
+npm run email:smoke
+```
 
 Closing an assignment prevents new tokens and commitments. Students with existing submissions can still read their evidence and current policy. Existing fallback commitments can receive an upload reservation and be evaluated against their original policy/grace window.
 
@@ -80,13 +94,17 @@ npm run db:reset
 npm run db:test
 npm run db:lint
 npm run db:types:check
+npm run lint
+npm run typecheck
+npm run build
 npm test
 npm run test:integration
+npm run test:e2e
 ```
 
 The integration script reads local credentials from `supabase status`, starts a Next.js development server, creates isolated test users/course/enrollment fixtures, exercises the protected APIs and signed Storage upload, then stops the server. It refuses to run against a non-local Supabase URL. `npm run db:uploads:cleanup` is a dry run; add `--apply` to remove expired or finalized staging objects after signed upload links have expired.
 
-The browser test suite exercises student sign-in, a normal upload, simulated fallback commitment, confirmation after reload, matching and mismatching uploads, receipt display, and signed file access. It also checks that an unrelated student cannot read the assignment. The suite needs the local Supabase stack and Chromium:
+The browser test suite exercises both role-aware sign-in flows, normal and simulated fallback submission, confirmation after reload, matching and mismatching uploads, receipt and signed file access, and unrelated-student denial. The lecturer flow covers publish failure with a retained draft, successful publication, human review without rewriting evidence results, close/archive, archived listing, and persisted profile preferences. The suite needs the local Supabase stack and Chromium:
 
 ```sh
 npx playwright install chromium
