@@ -156,6 +156,9 @@ test('student records a normal upload and a simulated commitment, then verifies 
   await viewFile.click()
   const download = await downloadPromise
   expect(await download.failure()).toBeNull()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login$/)
 })
 
 test('a failed upload reservation stays on the form and shows the API error', async ({ page }) => {
@@ -183,11 +186,35 @@ test('a different student cannot open another student assignment', async ({ page
   await expect(page.getByRole('heading', { name: 'Assignment not found' })).toBeVisible()
 })
 
+test('a failed sign out shows an error and keeps the student signed in', async ({ page }) => {
+  await signIn(page, student)
+  await page.route('**/auth/v1/logout*', async (route) => {
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Logout unavailable' }) })
+  })
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+
+  await expect(page.getByRole('alert')).toContainText('Could not sign out:')
+  await expect(page).not.toHaveURL(/\/login$/)
+})
+
 test('lecturer publishes assignments, reviews evidence, archives, and saves shared profile preferences', async ({ page }) => {
   await signIn(page, lecturer, 'lecturer')
   await expect(page.getByRole('heading', { name: /^Welcome/ })).toBeVisible()
 
+  await page.emulateMedia({ colorScheme: 'dark' })
   await page.goto('/lecturer/assignments/new')
+  const titleInput = page.getByLabel('Title')
+  await expect(titleInput).toBeVisible()
+  const titleColor = await titleInput.evaluate((element) => getComputedStyle(element).color)
+  const placeholder = await titleInput.evaluate((element) => ({
+    color: getComputedStyle(element, '::placeholder').color,
+    opacity: getComputedStyle(element, '::placeholder').opacity,
+  }))
+  expect(titleColor).not.toBe('rgb(237, 237, 237)')
+  expect(placeholder.color).not.toBe('rgb(237, 237, 237)')
+  expect(placeholder.opacity).toBe('1')
+
   await page.getByLabel('Title').fill('Draft retained after publish failure')
   await page.getByLabel('Course').selectOption(courseId)
   await page.getByLabel('Description').fill('This verifies that a publication failure preserves the saved draft.')
@@ -195,8 +222,14 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   const localDeadline = [deadline.getFullYear(), String(deadline.getMonth() + 1).padStart(2, '0'), String(deadline.getDate()).padStart(2, '0')].join('-')
     + `T${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`
   await page.getByLabel('Deadline').fill(localDeadline)
+  let releasePublish: () => void = () => {}
+  let markPublishStarted: () => void = () => {}
+  const publishStarted = new Promise<void>((resolve) => { markPublishStarted = resolve })
+  const publishGate = new Promise<void>((resolve) => { releasePublish = resolve })
   const publishEndpoint = /\/api\/assignments\/[^/]+\/publish$/
   await page.route(publishEndpoint, async (route) => {
+    markPublishStarted()
+    await publishGate
     await route.fulfill({
       status: 503,
       contentType: 'application/json',
@@ -204,6 +237,9 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
     })
   })
   await page.getByRole('button', { name: 'Publish assignment' }).click()
+  await publishStarted
+  await expect(page.getByRole('button', { name: 'Publishing…' })).toBeDisabled()
+  releasePublish()
   await expect(
     page.locator('div[role="alert"]').filter({ hasText: 'Draft saved, but publishing failed' }),
   ).toContainText('Draft saved, but publishing failed: Publish is temporarily unavailable.')
@@ -283,4 +319,7 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await expect(page.getByText('Notification preferences saved.', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('checkbox', { name: 'Product updates' })).toBeChecked()
+
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login$/)
 })

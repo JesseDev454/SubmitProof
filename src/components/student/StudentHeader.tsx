@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import SignOutButton from "@/components/shared/SignOutButton";
 
 interface StudentHeaderProps {
   displayName?: string;
@@ -51,7 +52,7 @@ export function StudentHeader({
       </div>
 
       {/* Right: Notifications & User Menu */}
-      <div className="flex items-center gap-4 sm:gap-6">
+      <div className="flex items-center gap-3 sm:gap-6">
         {/* Notification inbox is not part of the current release. */}
         <button
           type="button"
@@ -110,6 +111,10 @@ export function StudentHeader({
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </Link>
+        <SignOutButton
+          compactOnMobile
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+        />
       </div>
     </header>
   );

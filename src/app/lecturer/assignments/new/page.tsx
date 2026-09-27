@@ -30,10 +30,15 @@ export default function CreateAssignmentPage() {
   const [maxSizeMb, setMaxSizeMb] = useState(10)
   const [graceMinutes, setGraceMinutes] = useState(0)
   const [fallbackEnabled, setFallbackEnabled] = useState(true)
+  const [coursesLoading, setCoursesLoading] = useState(true)
+  const [courseReloadKey, setCourseReloadKey] = useState(0)
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [savingAction, setSavingAction] = useState<'draft' | 'published' | null>(null)
+  const [savingStep, setSavingStep] = useState<'saving' | 'publishing' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [savedDraftUrl, setSavedDraftUrl] = useState<string | null>(null)
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null)
+  const saving = savingAction !== null
 
   useEffect(() => {
     let active = true
@@ -42,8 +47,16 @@ export default function CreateAssignmentPage() {
       .catch((caught: unknown) => {
         if (active) setCourseLoadError(caught instanceof Error ? caught.message : 'Courses could not be loaded.')
       })
+      .finally(() => { if (active) setCoursesLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [courseReloadKey])
+
+  function reloadCourses() {
+    setCoursesLoading(true)
+    setCourseLoadError(null)
+    setCourses([])
+    setCourseReloadKey((key) => key + 1)
+  }
 
   function toggleMimeType(mimeType: string) {
     setMimeTypes((current) => current.includes(mimeType)
@@ -51,9 +64,31 @@ export default function CreateAssignmentPage() {
       : [...current, mimeType])
   }
 
+  async function publishDraft(assignmentId: string) {
+    const publishResponse = await fetch(`/api/assignments/${assignmentId}/publish`, { method: 'POST' })
+    if (!publishResponse.ok) throw new Error(await responseError(publishResponse))
+    router.push(`/lecturer/assignments/${assignmentId}`)
+  }
+
+  async function retryPublish() {
+    if (!savedDraftId) return
+    setError(null)
+    setSavingAction('published')
+    setSavingStep('publishing')
+    try {
+      await publishDraft(savedDraftId)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The saved draft could not be published.')
+    } finally {
+      setSavingAction(null)
+      setSavingStep(null)
+    }
+  }
+
   async function save(status: 'draft' | 'published') {
     setError(null)
     setSavedDraftUrl(null)
+    setSavedDraftId(null)
     if (!title.trim() || !courseId) {
       setError('Enter an assignment title and choose a course.')
       return
@@ -68,7 +103,9 @@ export default function CreateAssignmentPage() {
       return
     }
 
-    setSaving(true)
+    setSavingAction(status)
+    setSavingStep('saving')
+    let draftSaved = false
     try {
       const createdResponse = await fetch('/api/assignments', {
         method: 'POST',
@@ -91,22 +128,22 @@ export default function CreateAssignmentPage() {
       const assignmentId = created.data?.id
       if (!assignmentId) throw new Error('The server did not return the saved draft.')
       const url = `/lecturer/assignments/${assignmentId}`
+      draftSaved = true
       setSavedDraftUrl(url)
+      setSavedDraftId(assignmentId)
       if (status === 'draft') {
         router.push(url)
         return
       }
 
-      const publishResponse = await fetch(`/api/assignments/${assignmentId}/publish`, { method: 'POST' })
-      if (!publishResponse.ok) {
-        setError(`Draft saved, but publishing failed: ${await responseError(publishResponse)}`)
-        return
-      }
-      router.push(url)
+      setSavingStep('publishing')
+      await publishDraft(assignmentId)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The assignment could not be saved.')
+      const message = caught instanceof Error ? caught.message : 'The assignment could not be saved.'
+      setError(draftSaved ? `Draft saved, but publishing failed: ${message}` : message)
     } finally {
-      setSaving(false)
+      setSavingAction(null)
+      setSavingStep(null)
     }
   }
 
@@ -117,25 +154,26 @@ export default function CreateAssignmentPage() {
         <h1 className="text-3xl font-bold text-gray-900">Create assignment</h1>
         <p className="mt-1 text-sm text-gray-600">The fallback rules are recorded as a versioned policy when this assignment is created.</p>
       </div>
-      {courseLoadError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Courses could not be loaded: {courseLoadError}</p>}
-      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}{savedDraftUrl && <p className="mt-2"><Link className="font-semibold underline" href={savedDraftUrl}>Open saved draft</Link></p>}</div>}
+      {coursesLoading && <p role="status" aria-live="polite" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Loading courses linked to your lecturer account…</p>}
+      {courseLoadError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p>Courses could not be loaded: {courseLoadError}</p><button type="button" onClick={reloadCourses} className="mt-2 font-semibold underline">Try loading courses again</button></div>}
+      {!coursesLoading && !courseLoadError && courses.length === 0 && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">No course is linked to this lecturer account yet. Ask your institution administrator to assign a course, then reload this page.</p>}
+      {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p>{error}</p>{savedDraftUrl && <div className="mt-2 flex flex-wrap items-center gap-4"><Link className="font-semibold underline" href={savedDraftUrl}>Open saved draft</Link>{savedDraftId && <button type="button" disabled={saving} onClick={() => void retryPublish()} className="font-semibold underline disabled:cursor-wait disabled:opacity-60">{saving ? 'Publishing…' : 'Retry publishing'}</button>}</div>}</div>}
 
       <section className="space-y-5 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <div>
           <label htmlFor="assignment-title" className="mb-1 block text-sm font-medium text-gray-700">Title</label>
-          <input id="assignment-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <input id="assignment-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="For example: Research Methods Essay" maxLength={200} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 placeholder:opacity-100" />
         </div>
         <div>
           <label htmlFor="assignment-course" className="mb-1 block text-sm font-medium text-gray-700">Course</label>
-          <select id="assignment-course" value={courseId} onChange={(event) => setCourseId(event.target.value)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+          <select id="assignment-course" value={courseId} onChange={(event) => setCourseId(event.target.value)} disabled={coursesLoading || Boolean(courseLoadError) || courses.length === 0} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-gray-50">
             <option value="">Choose a course</option>
             {courses.map((course) => <option key={course.id} value={course.id}>{course.code} · {course.title}</option>)}
           </select>
-          {courses.length === 0 && <p className="mt-1 text-xs text-gray-500">No owned courses are available. Course setup is managed outside this phase.</p>}
         </div>
         <div>
           <label htmlFor="assignment-description" className="mb-1 block text-sm font-medium text-gray-700">Description</label>
-          <textarea id="assignment-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={10000} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <textarea id="assignment-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the task and submission requirements." rows={4} maxLength={10000} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 placeholder:opacity-100" />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -171,8 +209,9 @@ export default function CreateAssignmentPage() {
         </label>
       </section>
       <div className="flex flex-wrap gap-3">
-        <button type="button" onClick={() => void save('draft')} disabled={saving || courses.length === 0} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:opacity-50">{saving ? 'Saving…' : 'Save as draft'}</button>
-        <button type="button" onClick={() => void save('published')} disabled={saving || courses.length === 0} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Publish assignment'}</button>
+        <button type="button" onClick={() => void save('draft')} disabled={saving || coursesLoading || Boolean(courseLoadError) || courses.length === 0} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500">{savingAction === 'draft' ? 'Saving draft…' : 'Save as draft'}</button>
+        <button type="button" onClick={() => void save('published')} disabled={saving || coursesLoading || Boolean(courseLoadError) || courses.length === 0} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-400">{savingAction === 'published' ? (savingStep === 'publishing' ? 'Publishing…' : 'Saving draft…') : 'Publish assignment'}</button>
+        {saving && <p role="status" aria-live="polite" className="self-center text-sm text-gray-600">{savingAction === 'published' && savingStep === 'publishing' ? 'Publishing your saved assignment…' : 'Saving the assignment…'}</p>}
       </div>
     </div>
   )
