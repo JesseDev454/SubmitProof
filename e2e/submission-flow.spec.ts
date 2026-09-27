@@ -242,7 +242,9 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
 
   await page.goto(`/lecturer/assignments/${fallbackAssignmentId}/submissions/${submission.id}`)
   await expect(page.getByText('Latest fallback policy result')).toBeVisible()
-  await expect(page.getByText('does not qualify', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('Latest fallback policy result').locator('..').getByText('does not qualify', { exact: true }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Flag for review' }).click()
   await page.getByRole('button', { name: 'Confirm flagged' }).click()
   await expect(page.getByText(/Latest decision: flagged/)).toBeVisible()
