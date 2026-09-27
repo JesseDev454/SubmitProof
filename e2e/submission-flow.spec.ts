@@ -194,7 +194,7 @@ test('a failed sign out shows an error and keeps the student signed in', async (
 
   await page.getByRole('button', { name: 'Sign out' }).click()
 
-  await expect(page.getByRole('alert')).toContainText('Could not sign out:')
+  await expect(page.getByText('Could not sign out: Logout unavailable', { exact: true })).toBeVisible()
   await expect(page).not.toHaveURL(/\/login$/)
 })
 
@@ -266,7 +266,9 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
     .eq('assignment_id', fallbackAssignmentId)
     .eq('student_id', student.id)
     .single()
-  if (submissionError) throw submissionError
+  if (submissionError) {
+    throw new Error(`E2E fallback submission lookup returned ${submissionError.code}: ${submissionError.message}`)
+  }
   const { data: uploadsBeforeReview, error: uploadReadError } = await admin
     .from('submission_uploads')
     .select('verification_result, policy_result')
@@ -274,7 +276,9 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
     .order('finalized_at', { ascending: false })
     .limit(1)
     .single()
-  if (uploadReadError) throw uploadReadError
+  if (uploadReadError) {
+    throw new Error(`E2E fallback upload lookup returned ${uploadReadError.code}: ${uploadReadError.message}`)
+  }
 
   await page.goto(`/lecturer/assignments/${fallbackAssignmentId}/submissions/${submission.id}`)
   await expect(page.getByText('Latest fallback policy result')).toBeVisible()
