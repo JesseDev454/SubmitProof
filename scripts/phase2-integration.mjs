@@ -414,7 +414,7 @@ try {
     body: { decision: 'accepted', reason: 'Reviewed the evidence manually.' },
   })
   assert.equal(acceptedReview.response.status, 201, JSON.stringify(acceptedReview.payload))
-  const reviewedSubmission = await api(`/api/submissions/${normalFlow.reservation.submissionId}`, { cookie: studentCookie })
+  const reviewedSubmission = await api(`/api/submissions/${normalFlow.reservation.submissionId}`, { cookie: outsiderStudentCookie })
   assert.equal(reviewedSubmission.response.status, 200)
   assert.equal(reviewedSubmission.payload.data.reviews.length, 2)
   assert.equal(reviewedSubmission.payload.data.uploads[0].verification_result, 'not_applicable')
