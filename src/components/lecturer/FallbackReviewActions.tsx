@@ -57,7 +57,7 @@ export default function FallbackReviewActions({
       {currentDecision !== 'accepted' && (
         <>
           <label htmlFor="review-reason" className="block text-sm font-medium text-gray-700">Reason {qualifies ? '(optional)' : '(required when accepting non-qualifying evidence)'}</label>
-          <textarea id="review-reason" rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <textarea id="review-reason" rows={3} maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500" />
           {decision && <p className="text-xs text-gray-600">Confirm: record this submission as <strong>{decision}</strong>? The original evidence results will remain unchanged.</p>}
           <div className="flex flex-wrap gap-2">
             {!decision ? <>

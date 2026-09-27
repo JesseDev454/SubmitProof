@@ -178,12 +178,12 @@ export default function CreateAssignmentPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="assignment-deadline" className="mb-1 block text-sm font-medium text-gray-700">Deadline</label>
-            <input id="assignment-deadline" type="datetime-local" value={deadlineLocal} onChange={(event) => setDeadlineLocal(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            <input id="assignment-deadline" type="datetime-local" value={deadlineLocal} onChange={(event) => setDeadlineLocal(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" />
             <p className="mt-1 text-xs text-gray-500">A draft with no deadline uses a temporary deadline 7 days from creation.</p>
           </div>
           <div>
             <label htmlFor="assignment-size" className="mb-1 block text-sm font-medium text-gray-700">Maximum file size</label>
-            <select id="assignment-size" value={maxSizeMb} onChange={(event) => setMaxSizeMb(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+            <select id="assignment-size" value={maxSizeMb} onChange={(event) => setMaxSizeMb(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
               {SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size} MiB</option>)}
             </select>
           </div>
@@ -201,7 +201,7 @@ export default function CreateAssignmentPage() {
         </fieldset>
         <div>
           <label htmlFor="grace-minutes" className="mb-1 block text-sm font-medium text-gray-700">Fallback upload grace period (minutes)</label>
-          <input id="grace-minutes" type="number" min={0} max={2147483647} value={graceMinutes} onChange={(event) => setGraceMinutes(Math.max(0, Number(event.target.value) || 0))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <input id="grace-minutes" type="number" min={0} max={2147483647} value={graceMinutes} onChange={(event) => setGraceMinutes(Math.max(0, Number(event.target.value) || 0))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500" />
         </div>
         <label className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm text-gray-800">
           <input type="checkbox" checked={fallbackEnabled} onChange={(event) => setFallbackEnabled(event.target.checked)} className="mt-0.5" />
