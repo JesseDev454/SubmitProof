@@ -204,7 +204,9 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
     })
   })
   await page.getByRole('button', { name: 'Publish assignment' }).click()
-  await expect(page.getByRole('alert')).toContainText('Draft saved, but publishing failed: Publish is temporarily unavailable.')
+  await expect(
+    page.locator('div[role="alert"]').filter({ hasText: 'Draft saved, but publishing failed' }),
+  ).toContainText('Draft saved, but publishing failed: Publish is temporarily unavailable.')
   await page.getByRole('link', { name: 'Open saved draft' }).click()
   await expect(page.getByRole('heading', { name: 'Draft retained after publish failure' })).toBeVisible()
   await expect(page.getByText('draft', { exact: true })).toBeVisible()
