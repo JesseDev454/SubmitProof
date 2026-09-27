@@ -7,25 +7,23 @@ export interface CourseOption {
 }
 
 /**
- * Fetches courses where lecturer_id = current user.
- * Returns empty array on any error — callers show a "No courses found" placeholder.
+ * Fetches courses where lecturer_id = current user. Query errors bubble up so
+ * the create-assignment form can distinguish a failed read from an empty list.
  */
 export async function fetchLecturerCourses(): Promise<CourseOption[]> {
-  try {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!user) return []
 
-    const { data, error } = await supabase
-      .from('courses')
-      .select('id, code, title')
-      .eq('lecturer_id', user.id)
-      .order('code', { ascending: true })
+  const { data, error } = await supabase
+    .from('courses')
+    .select('id, code, title')
+    .eq('lecturer_id', user.id)
+    .order('code', { ascending: true })
 
-    if (error || !data) return []
+  if (error) throw error
+  if (!data) return []
 
-    return data.map(c => ({ id: String(c.id), code: String(c.code), title: String(c.title) }))
-  } catch {
-    return []
-  }
+  return data.map(c => ({ id: c.id, code: c.code, title: c.title }))
 }

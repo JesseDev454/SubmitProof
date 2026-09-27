@@ -46,6 +46,12 @@ jobs:
       - name: Typecheck application
         run: npm run typecheck
 
+      - name: Build application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+
       - name: Run unit tests
         run: npm test
 
@@ -55,7 +61,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run student browser flow
+      - name: Run student and lecturer browser flows
         run: npm run test:e2e
 
       - name: Upload Playwright report on failure

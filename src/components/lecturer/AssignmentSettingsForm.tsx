@@ -1,574 +1,102 @@
 'use client'
 
-import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { formatAuditEvent } from '@/features/audit/formatAuditEvent'
+import { useState } from 'react'
 
-interface Assignment {
+const FILE_TYPES = [
+  { mime: 'application/pdf', label: 'PDF' },
+  { mime: 'image/png', label: 'PNG image' },
+  { mime: 'image/jpeg', label: 'JPEG image' },
+  { mime: 'text/plain', label: 'UTF-8 text' },
+] as const
+
+export type AssignmentSettingsInput = {
   id: string
   title: string
   description: string | null
-  status: string
-  fallback_enabled: boolean
-  deadline_at: string | null
-  grace_period_minutes: number | null
-  max_file_size_bytes: number | null
-  allowed_file_types: string[] | null
-  created_by: string
-  course: { id: string; code: string; title: string } | null
+  policy: {
+    deadlineAt: string
+    fallbackEnabled: boolean
+    gracePeriodMinutes: number
+    allowedMimeTypes: string[]
+    maxFileSizeBytes: number
+  }
 }
 
-interface AuditEvent {
-  id: string
-  event_type: string
-  created_at: string | null
-  actor_id: string | null
-  metadata_json: Record<string, unknown> | null
-  actor: { full_name: string | null; email: string | null } | null
-}
-
-interface AssignmentSettingsFormProps {
-  assignmentId: string
-  assignment: Assignment
-  commitmentsExist: boolean
-  auditEvents: AuditEvent[]
-}
-
-type ActionState = 'idle' | 'saving' | 'archiving' | 'confirming-archive' | 'error'
-
-function gracePeriodLabel(minutes: number | null): string {
-  if (!minutes || minutes === 0) return 'No grace period'
-  const days = Math.round(minutes / (60 * 24))
-  return `${days} day${days === 1 ? '' : 's'} after deadline`
-}
-
-function fileSizeLabel(bytes: number | null): string {
-  if (!bytes) return '—'
-  const mb = bytes / (1024 * 1024)
-  return `${Math.round(mb)} MB`
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
-
-export default function AssignmentSettingsForm({
-  assignmentId,
-  assignment,
-  commitmentsExist,
-  auditEvents,
-}: AssignmentSettingsFormProps) {
+export default function AssignmentSettingsForm({ initial }: { initial: AssignmentSettingsInput }) {
   const router = useRouter()
+  const [title, setTitle] = useState(initial.title)
+  const [description, setDescription] = useState(initial.description ?? '')
+  const [deadlineLocal, setDeadlineLocal] = useState(() => {
+    const deadline = new Date(initial.policy.deadlineAt)
+    return new Date(deadline.getTime() - deadline.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+  })
+  const [fallbackEnabled, setFallbackEnabled] = useState(initial.policy.fallbackEnabled)
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(initial.policy.gracePeriodMinutes)
+  const [allowedMimeTypes, setAllowedMimeTypes] = useState(initial.policy.allowedMimeTypes)
+  const [maxSizeMb, setMaxSizeMb] = useState(initial.policy.maxFileSizeBytes / 1024 / 1024)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  function toggleMimeType(mimeType: string) {
+    setAllowedMimeTypes((current) => current.includes(mimeType)
+      ? current.filter((value) => value !== mimeType)
+      : [...current, mimeType])
+  }
 
-  const [state, setState] = useState<ActionState>('idle')
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-
-  // Form state
-  const [description, setDescription] = useState(assignment.description ?? '')
-  const [gracePeriodDays, setGracePeriodDays] = useState(
-    assignment.grace_period_minutes
-      ? Math.round(assignment.grace_period_minutes / (60 * 24))
-      : 0
-  )
-  const [allowedFileTypes, setAllowedFileTypes] = useState(
-    assignment.allowed_file_types?.join(', ') ?? ''
-  )
-  const [maxFileSizeMb, setMaxFileSizeMb] = useState(
-    assignment.max_file_size_bytes
-      ? Math.round(assignment.max_file_size_bytes / (1024 * 1024))
-      : 50
-  )
-  const [fallbackEnabled, setFallbackEnabled] = useState(assignment.fallback_enabled)
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  async function handleSave() {
-    setState('saving')
-    setErrorMsg(null)
-
-    // Build only-changed-fields payload
-    const payload: Record<string, unknown> = {}
-
-    if (description !== assignment.description) payload.description = description
-    if (gracePeriodDays !== (assignment.grace_period_minutes ? Math.round(assignment.grace_period_minutes / (60 * 24)) : 0)) {
-      payload.grace_period_minutes = gracePeriodDays * 24 * 60
-    }
-    if (allowedFileTypes !== (assignment.allowed_file_types?.join(', ') ?? '')) {
-      payload.allowed_file_types = allowedFileTypes
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-    }
-    if (maxFileSizeMb !== (assignment.max_file_size_bytes ? Math.round(assignment.max_file_size_bytes / (1024 * 1024)) : 50)) {
-      payload.max_file_size_bytes = maxFileSizeMb * 1024 * 1024
-    }
-
-    // Only include fallback_enabled if it was actually editable (commitments don't exist)
-    if (!commitmentsExist && fallbackEnabled !== assignment.fallback_enabled) {
-      payload.fallback_enabled = fallbackEnabled
-    }
-
+  async function save() {
+    setSaving(true)
+    setError(null)
+    setMessage(null)
     try {
-      const res = await fetch(`/api/assignments/${assignmentId}`, {
+      const response = await fetch(`/api/assignments/${initial.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          policy: {
+            deadlineAt: new Date(deadlineLocal).toISOString(),
+            fallbackEnabled,
+            gracePeriodMinutes,
+            allowedMimeTypes,
+            maxFileSizeBytes: maxSizeMb * 1024 * 1024,
+          },
+        }),
       })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        setErrorMsg(body?.error ?? `Server error (${res.status}) — the API endpoint may not be implemented yet.`)
-        setState('error')
-        return
+      if (!response.ok) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.error?.message ?? `Request failed (${response.status}).`)
       }
-
-      setState('idle')
-      // TODO: Show confirmation toast/banner instead of hard redirect
-      router.push(`/lecturer/assignments/${assignmentId}`)
-    } catch (err) {
-      setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Network error — the /api/assignments PATCH endpoint may not be implemented yet.'
-      )
-      setState('error')
+      setMessage('Draft settings saved. A new policy version was recorded if the policy changed.')
+      router.refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The settings could not be saved.')
+    } finally {
+      setSaving(false)
     }
   }
-
-  async function handleArchive() {
-    if (state !== 'confirming-archive') {
-      // Show confirm step
-      setState('confirming-archive')
-      return
-    }
-
-    setState('archiving')
-    setErrorMsg(null)
-
-    try {
-      const res = await fetch(`/api/assignments/${assignmentId}/archive`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        setErrorMsg(body?.error ?? `Server error (${res.status}) — the API endpoint may not be implemented yet.`)
-        setState('error')
-        return
-      }
-
-      router.push('/lecturer/assignments')
-    } catch (err) {
-      setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Network error — the /api/assignments/:id/archive endpoint may not be implemented yet.'
-      )
-      setState('error')
-    }
-  }
-
-  // ── Derived values ────────────────────────────────────────────────────────
-
-  const hasChanges = description !== assignment.description ||
-    gracePeriodDays !== (assignment.grace_period_minutes ? Math.round(assignment.grace_period_minutes / (60 * 24)) : 0) ||
-    allowedFileTypes !== (assignment.allowed_file_types?.join(', ') ?? '') ||
-    maxFileSizeMb !== (assignment.max_file_size_bytes ? Math.round(assignment.max_file_size_bytes / (1024 * 1024)) : 50) ||
-    (!commitmentsExist && fallbackEnabled !== assignment.fallback_enabled)
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
-      {/* Error banner */}
-      {state === 'error' && errorMsg && (
-        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="text-sm text-red-700">{errorMsg}</p>
-          <button
-            onClick={() => { setState('idle'); setErrorMsg(null) }}
-            className="ml-auto shrink-0 text-red-400 hover:text-red-600"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <div className="mx-auto max-w-3xl space-y-5">
+      <Link href={`/lecturer/assignments/${initial.id}`} className="text-sm font-medium text-blue-700 hover:underline">← Back to assignment</Link>
+      <h1 className="text-3xl font-bold text-gray-900">Draft settings</h1>
+      {message && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{message}</p>}
+      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      <section className="space-y-5 rounded-xl border border-gray-200 bg-white p-6">
+        <div><label htmlFor="settings-title" className="mb-1 block text-sm font-medium">Title</label><input id="settings-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
+        <div><label htmlFor="settings-description" className="mb-1 block text-sm font-medium">Description</label><textarea id="settings-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={10000} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><label htmlFor="settings-deadline" className="mb-1 block text-sm font-medium">Deadline</label><input id="settings-deadline" type="datetime-local" value={deadlineLocal} onChange={(event) => setDeadlineLocal(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
+          <div><label htmlFor="settings-size" className="mb-1 block text-sm font-medium">Maximum size</label><select id="settings-size" value={maxSizeMb} onChange={(event) => setMaxSizeMb(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2">{[1, 5, 10, 25, 50].map((size) => <option key={size} value={size}>{size} MiB</option>)}</select></div>
         </div>
-      )}
-
-      <div className="flex gap-5 items-start">
-        {/* LEFT: form */}
-        <div className="flex-1 min-w-0 space-y-5">
-
-          {/* Assignment Description */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-sm font-semibold text-gray-800">Assignment Description</p>
-              </div>
-              {/* TODO: "Preview as Student" button — no student preview mode wired yet */}
-              <button
-                type="button"
-                className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
-                disabled
-                title="Student preview mode not yet implemented"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                Preview as Student
-              </button>
-            </div>
-            <div className="p-5 space-y-3">
-              <div>
-                {/* TODO: rich-text formatting not implemented — this is a plain textarea. */}
-                <textarea
-                  rows={6}
-                  placeholder="Update the instructions and details for this assignment..."
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="w-full rounded-t-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
-                />
-                {/* Decorative toolbar */}
-                <div className="flex items-center gap-1 rounded-b-lg border border-t-0 border-gray-300 bg-gray-50 px-2 py-1.5">
-                  {[
-                    { label: 'B', title: 'Bold' },
-                    { label: 'I', title: 'Italic', italic: true },
-                    { label: 'U', title: 'Underline', underline: true },
-                  ].map(btn => (
-                    <button
-                      key={btn.label}
-                      type="button"
-                      title={btn.title}
-                      disabled
-                      className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold text-gray-500 hover:bg-gray-200 disabled:opacity-50"
-                      style={{
-                        fontStyle: btn.italic ? 'italic' : undefined,
-                        textDecoration: btn.underline ? 'underline' : undefined,
-                      }}
-                    >
-                      {btn.label}
-                    </button>
-                  ))}
-                  <div className="mx-1 h-4 w-px bg-gray-300" />
-                  <button type="button" title="Bullet list" disabled className="flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-200 disabled:opacity-50">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                  </button>
-                  <button type="button" title="Numbered list" disabled className="flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-200 disabled:opacity-50">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l4 4-4 4M4 6h.01M4 12h.01M4 18h.01M9 17l4-4" />
-                    </svg>
-                  </button>
-                  <button type="button" title="Insert link" disabled className="flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-200 disabled:opacity-50">
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <p className="text-[11px] text-gray-400">{description.length} / 5000 characters</p>
-            </div>
-          </div>
-
-          {/* Fallback Policy */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
-              <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-              </svg>
-              <p className="text-sm font-semibold text-gray-800">Fallback Policy</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-xs text-gray-500">Configure offline submission settings for this assignment.</p>
-
-              {/* Warning banner if commitments exist */}
-              {commitmentsExist && (
-                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5">
-                  <svg className="mt-0.5 h-4 w-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <p className="text-xs font-semibold text-red-700">
-                      Fallback policy cannot be quietly changed
-                    </p>
-                    <p className="text-[11px] text-red-600 leading-relaxed">
-                      This assignment already has student commitments. Disabling or significantly changing the fallback policy may result in students and instructors being out of sync. All changes are recorded in the audit log below.
-                    </p>
-                    <a href="#" className="text-[11px] font-medium text-red-600 hover:underline" title="TODO: Learn more link">
-                      Learn more
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {/* Fallback enabled toggle */}
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800">
-                    Enable Connectivity Fallback
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Allow students to commit work offline and sync when they reconnect.
-                  </p>
-                </div>
-                <div className="shrink-0 flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => !commitmentsExist && setFallbackEnabled(!fallbackEnabled)}
-                    disabled={commitmentsExist}
-                    title={commitmentsExist ? 'Cannot change: commitments already exist' : ''}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      fallbackEnabled ? 'bg-green-500' : 'bg-gray-300'
-                    } ${commitmentsExist ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        fallbackEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Grace Period */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
-              <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm font-semibold text-gray-800">Grace Period</p>
-            </div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">Allow late submissions within a short window.</p>
-
-              {/* TODO: Grace period changes are less destructive than disabling fallback entirely per the PRD.
-                  This is editable regardless of commitment state. Assumption: grace period changes don't
-                  break existing commitments as noted in the PRD. */}
-
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Days</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="30"
-                    value={gracePeriodDays}
-                    onChange={e => setGracePeriodDays(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-700 mb-1">Display</p>
-                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <p className="text-sm text-gray-700 font-medium">{gracePeriodLabel(gracePeriodDays * 24 * 60)}</p>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-400">
-                Students can still upload files during this period if they miss the deadline.
-              </p>
-            </div>
-          </div>
-
-          {/* File Rules */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
-              <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-sm font-semibold text-gray-800">File Rules</p>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-xs text-gray-500">Specify allowed file types and size limits.</p>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Allowed file types</label>
-                <input
-                  type="text"
-                  placeholder=".pdf, .docx, .zip, .py"
-                  value={allowedFileTypes}
-                  onChange={e => setAllowedFileTypes(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated (e.g. .pdf, .docx, .zip)</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Max file size</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={maxFileSizeMb}
-                    onChange={e => setMaxFileSizeMb(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
-                  <span className="text-sm font-medium text-gray-600">MB</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Maximum 500 MB per file</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Audit / Policy Change Log */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-sm font-semibold text-gray-800">Audit / Policy Change Log</p>
-              </div>
-              <a
-                href="#"
-                className="text-xs font-medium text-blue-600 hover:underline"
-                title="TODO: Full history view not yet implemented"
-              >
-                View Full History
-              </a>
-            </div>
-
-            {auditEvents.length === 0 ? (
-              <div className="p-5 text-center">
-                <p className="text-xs text-gray-400">No policy changes recorded yet.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="border-b border-gray-100 bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Date & Time</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Changed By</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Change</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {auditEvents.map(event => (
-                      <tr key={event.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-600">
-                          {formatDateTime(event.created_at)}
-                        </td>
-                        <td className="px-4 py-2 text-gray-600">
-                          {event.actor?.full_name || event.actor?.email || 'Unknown'}
-                        </td>
-                        <td className="px-4 py-2 text-gray-600 capitalize">
-                          {formatAuditEvent(event.event_type)}
-                        </td>
-                        <td className="px-4 py-2 text-gray-500">
-                          {event.metadata_json
-                            ? JSON.stringify(event.metadata_json)
-                              .slice(0, 50)
-                              .replace(/[{}]/g, '')
-                              .replace(/"/g, '')
-                            : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT: Close Assignment card */}
-        <div className="w-72 shrink-0 space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-gray-100 px-4 py-3">
-              <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">Close Assignment</p>
-                <p className="text-[11px] text-gray-400">Manually close this assignment to prevent further submissions.</p>
-              </div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-                <p className="text-xs font-semibold text-amber-800">⚠ This action cannot be undone.</p>
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Students will no longer be able to upload or sync files, even during the grace period.
-                </p>
-              </div>
-
-              {/* Archive confirm step */}
-              {state === 'confirming-archive' && (
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-600">Are you sure? This cannot be reversed.</p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleArchive()}
-                      disabled={state !== 'confirming-archive'}
-                      className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
-                    >
-                      Yes, close now
-                    </button>
-                    <button
-                      onClick={() => setState('idle')}
-                      className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {state !== 'confirming-archive' && (
-                <button
-                  onClick={() => handleArchive()}
-                  className="w-full rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors"
-                >
-                  Close Assignment Now
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom action bar */}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
-        <div className="text-xs text-gray-400">
-          {hasChanges ? 'You have unsaved changes' : 'All changes saved'}
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => router.push(`/lecturer/assignments/${assignmentId}`)}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!hasChanges || state === 'saving'}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {state === 'saving' ? 'Saving…' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
+        <fieldset><legend className="mb-2 text-sm font-medium">Allowed file types</legend><div className="grid gap-2 sm:grid-cols-2">{FILE_TYPES.map((fileType) => <label key={fileType.mime} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allowedMimeTypes.includes(fileType.mime)} onChange={() => toggleMimeType(fileType.mime)} />{fileType.label}</label>)}</div></fieldset>
+        <div><label htmlFor="settings-grace" className="mb-1 block text-sm font-medium">Fallback grace period (minutes)</label><input id="settings-grace" type="number" min={0} max={2147483647} value={gracePeriodMinutes} onChange={(event) => setGracePeriodMinutes(Math.max(0, Number(event.target.value) || 0))} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
+        <label className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm"><input type="checkbox" checked={fallbackEnabled} onChange={(event) => setFallbackEnabled(event.target.checked)} className="mt-0.5" /><span><strong>Enable connectivity fallback</strong><span className="mt-1 block text-xs text-gray-600">This policy is editable only while the assignment remains a draft.</span></span></label>
+      </section>
+      <button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save draft settings'}</button>
     </div>
   )
 }

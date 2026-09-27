@@ -44,6 +44,8 @@ const server = spawn(process.execPath, [
     NEXT_PUBLIC_SUPABASE_ANON_KEY: anonKey,
     SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey,
     ENABLE_SIMULATED_SMS: 'true',
+    EMAIL_ADAPTER: 'fake',
+    CRON_SECRET: 'phase2-integration-cron-secret',
   },
 })
 
@@ -104,9 +106,10 @@ async function signedInCookie(user) {
   return [...values].map(([name, value]) => `${name}=${value}`).join('; ')
 }
 
-async function api(path, { cookie, method = 'GET', body, origin = appOrigin } = {}) {
+async function api(path, { cookie, method = 'GET', body, origin = appOrigin, authorization } = {}) {
   const headers = new Headers()
   if (cookie) headers.set('cookie', cookie)
+  if (authorization) headers.set('authorization', authorization)
   if (body !== undefined) headers.set('content-type', 'application/json')
   if (method !== 'GET') headers.set('origin', origin)
   const response = await fetch(`${appOrigin}${path}`, {
@@ -163,6 +166,7 @@ try {
   const outsiderLecturer = await createUser('outsider', 'lecturer')
   const student = await createUser('student')
   const outsiderStudent = await createUser('other-student')
+  const reminderStudent = await createUser('reminder-student')
   await promoteToLecturer(lecturer.id)
   await promoteToLecturer(outsiderLecturer.id)
 
@@ -176,6 +180,10 @@ try {
     .from('enrollments')
     .insert({ course_id: course.id, student_id: student.id })
   if (enrollmentError) throw enrollmentError
+  const { error: reminderEnrollmentError } = await admin
+    .from('enrollments')
+    .insert({ course_id: course.id, student_id: reminderStudent.id })
+  if (reminderEnrollmentError) throw reminderEnrollmentError
 
   const lecturerCookie = await signedInCookie(lecturer)
   const outsiderLecturerCookie = await signedInCookie(outsiderLecturer)
@@ -376,6 +384,107 @@ try {
   assert.equal(normalFlow.evidence.verificationResult, 'not_applicable')
   assert.equal(normalFlow.evidence.policyResult, 'not_applicable')
 
+  const malformedReview = await api(`/api/submissions/${normalFlow.reservation.submissionId}/review`, {
+    cookie: lecturerCookie,
+    method: 'POST',
+    body: { decision: 'approved' },
+  })
+  assert.equal(malformedReview.response.status, 400)
+  const noReasonReview = await api(`/api/submissions/${normalFlow.reservation.submissionId}/review`, {
+    cookie: lecturerCookie,
+    method: 'POST',
+    body: { decision: 'accepted' },
+  })
+  assert.equal(noReasonReview.response.status, 400)
+  const crossLecturerReview = await api(`/api/submissions/${normalFlow.reservation.submissionId}/review`, {
+    cookie: outsiderLecturerCookie,
+    method: 'POST',
+    body: { decision: 'flagged' },
+  })
+  assert.equal(crossLecturerReview.response.status, 404)
+  const flaggedReview = await api(`/api/submissions/${normalFlow.reservation.submissionId}/review`, {
+    cookie: lecturerCookie,
+    method: 'POST',
+    body: { decision: 'flagged', reason: 'Confirm that the submitted file is complete.' },
+  })
+  assert.equal(flaggedReview.response.status, 201, JSON.stringify(flaggedReview.payload))
+  const acceptedReview = await api(`/api/submissions/${normalFlow.reservation.submissionId}/review`, {
+    cookie: lecturerCookie,
+    method: 'POST',
+    body: { decision: 'accepted', reason: 'Reviewed the evidence manually.' },
+  })
+  assert.equal(acceptedReview.response.status, 201, JSON.stringify(acceptedReview.payload))
+  const reviewedSubmission = await api(`/api/submissions/${normalFlow.reservation.submissionId}`, { cookie: studentCookie })
+  assert.equal(reviewedSubmission.response.status, 200)
+  assert.equal(reviewedSubmission.payload.data.reviews.length, 2)
+  assert.equal(reviewedSubmission.payload.data.uploads[0].verification_result, 'not_applicable')
+  assert.equal(reviewedSubmission.payload.data.uploads[0].policy_result, 'not_applicable')
+
+  const preferencesSaved = await api('/api/profile/notifications', {
+    cookie: studentCookie,
+    method: 'PATCH',
+    body: {
+      emailAssignmentReminders: false,
+      emailSubmissionConfirmations: true,
+      emailFallbackAttention: true,
+      emailProductUpdates: true,
+    },
+  })
+  assert.equal(preferencesSaved.response.status, 200, JSON.stringify(preferencesSaved.payload))
+  const otherPreferences = await api('/api/profile/notifications', { cookie: outsiderStudentCookie })
+  assert.equal(otherPreferences.response.status, 200)
+  assert.equal(otherPreferences.payload.data.email_assignment_reminders, true, 'accounts receive separate preferences')
+
+  const cronUnauthorized = await api('/api/cron/notifications')
+  assert.equal(cronUnauthorized.response.status, 401)
+  const cronRun = await api('/api/cron/notifications', { authorization: 'Bearer phase2-integration-cron-secret' })
+  assert.equal(cronRun.response.status, 200, JSON.stringify(cronRun.payload))
+  const cronRetry = await api('/api/cron/notifications', { authorization: 'Bearer phase2-integration-cron-secret' })
+  assert.equal(cronRetry.response.status, 200, JSON.stringify(cronRetry.payload))
+  const { count: reminderCount, error: reminderCountError } = await admin
+    .from('notification_outbox')
+    .select('id', { count: 'exact', head: true })
+    .eq('template_key', 'assignment_reminder')
+    .eq('recipient_user_id', reminderStudent.id)
+  if (reminderCountError) throw reminderCountError
+  assert.equal(reminderCount, 1, 'daily reminders are deduplicated by assignment and student')
+  const { data: reminderOutbox, error: reminderReadError } = await admin
+    .from('notification_outbox')
+    .select('status')
+    .eq('template_key', 'assignment_reminder')
+    .eq('recipient_user_id', reminderStudent.id)
+    .single()
+  if (reminderReadError) throw reminderReadError
+  assert.equal(reminderOutbox.status, 'sent', 'the fake email adapter drains the notification outbox')
+
+  const claimedBytes = Buffer.from('%PDF-1.7\nClaimed fallback bytes\n%%EOF\n')
+  const claimedHash = createHash('sha256').update(claimedBytes).digest('hex')
+  const attentionCommitment = await api('/api/dev/simulate-sms', {
+    cookie: studentCookie,
+    method: 'POST',
+    body: { payload: `SP1|${token}|${randomUUID().replaceAll('-', '')}|${claimedHash}` },
+  })
+  assert.equal(attentionCommitment.response.status, 201, JSON.stringify(attentionCommitment.payload))
+  const mismatchedFlow = await reserveAndComplete({
+    assignmentId,
+    cookie: studentCookie,
+    fileBytes: Buffer.from('%PDF-1.7\nDifferent fallback bytes\n%%EOF\n'),
+    idempotencyKey: randomUUID(),
+  })
+  assert.equal(mismatchedFlow.evidence.verificationResult, 'mismatch')
+  assert.equal(mismatchedFlow.evidence.policyResult, 'does_not_qualify')
+  const { data: attentionNotices, error: attentionError } = await admin
+    .from('notification_outbox')
+    .select('recipient_user_id, payload')
+    .like('event_key', `upload:${mismatchedFlow.evidence.uploadId}:attention:%`)
+    .order('recipient_user_id')
+  if (attentionError) throw attentionError
+  assert.equal(attentionNotices.length, 2, 'non-qualifying fallback uploads notify both parties when opted in')
+  const studentNotice = attentionNotices.find((notice) => notice.recipient_user_id === student.id)
+  const lecturerNotice = attentionNotices.find((notice) => notice.recipient_user_id === lecturer.id)
+  assert.equal(studentNotice?.payload.recipientRole, 'student', 'student notification links to the student evidence view')
+  assert.equal(lecturerNotice?.payload.recipientRole, 'lecturer', 'lecturer notification links to the review view')
+
   const invalidSignatureReservation = await reserveAndStage({
     assignmentId,
     cookie: outsiderStudentCookie,
@@ -489,6 +598,25 @@ try {
     body: { payload: `SP1|${token}|${randomUUID().replaceAll('-', '')}|${firstHash}` },
   })
   assert.equal(blockedAfterClose.response.status, 400)
+
+  const crossLecturerArchive = await api(`/api/assignments/${assignmentId}/archive`, {
+    cookie: outsiderLecturerCookie,
+    method: 'POST',
+  })
+  assert.equal(crossLecturerArchive.response.status, 404)
+  const archived = await api(`/api/assignments/${assignmentId}/archive`, {
+    cookie: lecturerCookie,
+    method: 'POST',
+  })
+  assert.equal(archived.response.status, 200, JSON.stringify(archived.payload))
+  const archivedAssignment = await api(`/api/assignments/${assignmentId}`, { cookie: studentCookie })
+  assert.equal(archivedAssignment.response.status, 200, 'a student can still read an archived assignment tied to their evidence')
+  const archivedEvidence = await api(`/api/submissions/${completed.reservation.submissionId}`, { cookie: studentCookie })
+  assert.equal(archivedEvidence.response.status, 200, 'a student retains access to evidence after archive')
+  const archivedList = await api('/api/assignments?archived=true', { cookie: lecturerCookie })
+  assert.ok(archivedList.payload.data.some((assignment) => assignment.id === assignmentId))
+  const defaultList = await api('/api/assignments', { cookie: lecturerCookie })
+  assert.ok(defaultList.payload.data.some((assignment) => assignment.id === assignmentId), 'the unfiltered list preserves its prior behavior')
 
   process.stdout.write('Phase 2 local API and Storage integration flow passed.\n')
 } finally {

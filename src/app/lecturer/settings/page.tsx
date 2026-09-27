@@ -1,7 +1,8 @@
 export default function LecturerSettingsPage() {
   return (
-    <div className="flex flex-1 items-center justify-center py-32 text-gray-400">
-      <p className="text-sm">Settings — coming soon</p>
+    <div className="mx-auto max-w-2xl space-y-4 py-16">
+      <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+      <p className="text-sm text-gray-600">Assignment rules can be edited from a draft assignment. Your profile, password, and email preferences are available in Profile.</p>
     </div>
   )
 }

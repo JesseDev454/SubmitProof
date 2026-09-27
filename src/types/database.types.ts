@@ -103,6 +103,8 @@ export type Database = {
       }
       assignments: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           closed_at: string | null
           course_id: string
           created_at: string
@@ -115,6 +117,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           closed_at?: string | null
           course_id: string
           created_at?: string
@@ -127,6 +131,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           closed_at?: string | null
           course_id?: string
           created_at?: string
@@ -145,6 +151,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "courses"
             referencedColumns: ["id", "lecturer_id"]
+          },
+          {
+            foreignKeyName: "assignments_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "assignments_current_policy_version_fk"
@@ -430,6 +443,103 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_outbox: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          event_key: string
+          id: string
+          last_error: string | null
+          next_attempt_at: string
+          payload: Json
+          provider_message_id: string | null
+          recipient_email: string
+          recipient_user_id: string | null
+          sent_at: string | null
+          status: string
+          template_key: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          event_key: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          provider_message_id?: string | null
+          recipient_email: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          template_key: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          event_key?: string
+          id?: string
+          last_error?: string | null
+          next_attempt_at?: string
+          payload?: Json
+          provider_message_id?: string | null
+          recipient_email?: string
+          recipient_user_id?: string | null
+          sent_at?: string | null
+          status?: string
+          template_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_outbox_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          email_assignment_reminders: boolean
+          email_fallback_attention: boolean
+          email_product_updates: boolean
+          email_submission_confirmations: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          email_assignment_reminders?: boolean
+          email_fallback_attention?: boolean
+          email_product_updates?: boolean
+          email_submission_confirmations?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          email_assignment_reminders?: boolean
+          email_fallback_attention?: boolean
+          email_product_updates?: boolean
+          email_submission_confirmations?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       submission_upload_reservations: {
         Row: {
           assignment_id: string
@@ -579,6 +689,54 @@ export type Database = {
           },
         ]
       }
+      submission_review_events: {
+        Row: {
+          assignment_id: string
+          decision: Database["public"]["Enums"]["submission_review_decision"]
+          event_at: string
+          id: string
+          reason: string | null
+          reviewer_id: string
+          student_id: string
+          submission_id: string
+        }
+        Insert: {
+          assignment_id: string
+          decision: Database["public"]["Enums"]["submission_review_decision"]
+          event_at?: string
+          id?: string
+          reason?: string | null
+          reviewer_id: string
+          student_id: string
+          submission_id: string
+        }
+        Update: {
+          assignment_id?: string
+          decision?: Database["public"]["Enums"]["submission_review_decision"]
+          event_at?: string
+          id?: string
+          reason?: string | null
+          reviewer_id?: string
+          student_id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_review_events_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "submission_review_events_submission_owner_fk"
+            columns: ["submission_id", "assignment_id", "student_id"]
+            isOneToOne: false
+            referencedRelation: "submissions"
+            referencedColumns: ["id", "assignment_id", "student_id"]
+          },
+        ]
+      }
       submissions: {
         Row: {
           assignment_id: string
@@ -677,6 +835,14 @@ export type Database = {
         Args: { p_actor_id: string; p_assignment_id: string }
         Returns: string
       }
+      archive_closed_assignment: {
+        Args: { p_actor_id: string; p_assignment_id: string }
+        Returns: string
+      }
+      claim_notification_outbox: {
+        Args: { p_limit?: number }
+        Returns: Database["public"]["Tables"]["notification_outbox"]["Row"][]
+      }
       complete_upload_reservation: {
         Args: {
           p_actor_id: string
@@ -689,6 +855,10 @@ export type Database = {
         }
         Returns: Json
       }
+      complete_notification_delivery: {
+        Args: { p_cancelled?: boolean; p_error?: string | null; p_outbox_id: string; p_provider_message_id?: string | null }
+        Returns: boolean
+      }
       create_assignment: {
         Args: {
           p_actor_id: string
@@ -698,6 +868,10 @@ export type Database = {
           p_title: string
         }
         Returns: string
+      }
+      enqueue_due_submission_reminders: {
+        Args: Record<PropertyKey, never>
+        Returns: number
       }
       create_upload_reservation: {
         Args: {
@@ -740,6 +914,15 @@ export type Database = {
         Args: { p_actor_id: string; p_assignment_id: string }
         Returns: string
       }
+      record_submission_review: {
+        Args: {
+          p_actor_id: string
+          p_decision: Database["public"]["Enums"]["submission_review_decision"]
+          p_reason?: string | null
+          p_submission_id: string
+        }
+        Returns: string
+      }
       record_webhook_outcome: {
         Args: {
           p_limited_metadata: Json
@@ -771,6 +954,7 @@ export type Database = {
         | "does_not_qualify"
         | "not_applicable"
       profile_role: "student" | "lecturer"
+      submission_review_decision: "accepted" | "flagged"
       submission_workflow_status:
         | "pending"
         | "awaiting_upload"
@@ -918,6 +1102,7 @@ export const Constants = {
         "not_applicable",
       ],
       profile_role: ["student", "lecturer"],
+      submission_review_decision: ["accepted", "flagged"],
       submission_workflow_status: [
         "pending",
         "awaiting_upload",

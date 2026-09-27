@@ -6,6 +6,9 @@ import { simulateSmsSchema } from '@/lib/api/schemas'
 import { createAdminClient } from '@/lib/db/admin'
 import { parseCommitmentPayload } from '@/lib/submissions/commitment'
 import { isSimulatorEnabled } from '@/lib/submissions/simulator'
+import { deliverPendingNotificationEmails } from '@/lib/notifications/outbox'
+
+export const maxDuration = 60
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +59,11 @@ export async function POST(request: NextRequest) {
     const result = data as { outcome: 'accepted' | 'duplicate' | 'rejected'; commitmentId?: string; reason?: string }
     if (result.outcome === 'rejected') {
       throw new ApiError(400, 'commitment_rejected', 'The commitment could not be accepted.')
+    }
+    try {
+      await deliverPendingNotificationEmails(25)
+    } catch {
+      // The commitment is durable; the scheduled job retries the queued email later.
     }
     return jsonOk({ ...result, provider: 'simulated' }, result.outcome === 'accepted' ? 201 : 200)
   } catch (error) {

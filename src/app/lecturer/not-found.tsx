@@ -5,10 +5,7 @@ export default function LecturerNotFound() {
     <NotFoundContent
       primaryHref="/lecturer"
       primaryLabel="Go to Dashboard"
-      secondaryLinks={[
-        { label: 'View Assignments', href: '/lecturer/assignments' },
-        { label: 'Contact Support', href: '#' }, // TODO: Implement support page
-      ]}
+      secondaryLinks={[{ label: 'View Assignments', href: '/lecturer/assignments' }]}
     />
   )
 }

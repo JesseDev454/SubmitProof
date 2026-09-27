@@ -8,6 +8,8 @@ Multi-row assignment, token, callback, upload reservation, and finalization oper
 
 Assignments begin as drafts. Creating or editing a draft writes immutable policy versions. Publishing freezes the policy; closing blocks new fallback tokens and commitments while preserving the policy and evidence for students who already have a submission.
 
+Lecturer decisions are append-only review events; accepting or flagging never changes hash verification or policy qualification. Archiving is limited to closed assignments and preserves authorized historical reads. Database triggers enqueue transactional email events using unique source-event keys. A server-only Resend worker claims the outbox, rechecks reminder eligibility before delivery, and schedules provider failures for retry.
+
 ## Commitment adapter
 
 The provider-independent commitment processor parses the `SP1` message, hashes the opaque token, checks the sender against its registered-phone snapshot, and persists accepted, duplicate, or rejected callback outcomes. The simulated adapter uses the authenticated student’s stored phone and server time. It is enabled only in local/test environments and always records `provider: simulated`. The real SMS provider transport is a later adapter; no production endpoint pretends to be a gateway.
@@ -27,5 +29,5 @@ The verified storage object creation time is the upload receipt evidence; route 
 - Courses and enrollments are provisioned fixtures in this phase; course administration is not implemented.
 - Supabase Auth supplies identities; profile roles are trusted only after a server-side profile lookup.
 - File signatures currently support PDF, PNG, JPEG, and UTF-8 text.
-- No Africa’s Talking credentials, live SMS endpoint, UI integration, or hosted deployment is part of this phase.
+- No Africa’s Talking credentials or live SMS endpoint are part of this phase. UI integration is implemented against the simulated provider; hosted deployment remains a later step.
 - Supabase’s signed upload URL has a fixed two-hour validity. The database reservation uses the same expiry and finalization validates the Storage creation timestamp.

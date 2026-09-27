@@ -359,7 +359,6 @@ export default function SubmitAssignmentPage() {
                 </p>
               </div>
             </div>
-            {/* TODO: Add real link once fallback informational page exists */}
             <Link
               href={`/student/assignments/${assignment.id}/fallback`}
               className="mt-2 flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-800 hover:underline pl-11"

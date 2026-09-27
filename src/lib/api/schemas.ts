@@ -40,4 +40,16 @@ export const simulateSmsSchema = z.object({
   providerMessageId: z.string().trim().min(1).max(200).optional(),
 }).strict()
 
+export const submissionReviewSchema = z.object({
+  decision: z.enum(['accepted', 'flagged']),
+  reason: z.string().trim().max(1000).optional(),
+}).strict()
+
+export const notificationPreferencesSchema = z.object({
+  emailAssignmentReminders: z.boolean(),
+  emailSubmissionConfirmations: z.boolean(),
+  emailFallbackAttention: z.boolean(),
+  emailProductUpdates: z.boolean(),
+}).strict()
+
 export type AssignmentPolicyInput = z.infer<typeof policySchema>

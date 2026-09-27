@@ -16,13 +16,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (error) throw error
     if (!submission) throw new ApiError(404, 'not_found', 'The requested submission was not found.')
 
-    const [commitments, uploads] = await Promise.all([
+    const [commitments, uploads, reviews] = await Promise.all([
       supabase.from('commitments').select('*').eq('submission_id', id).order('created_at'),
       supabase.from('submission_uploads').select('*').eq('submission_id', id).order('uploaded_at'),
+      supabase.from('submission_review_events').select('*').eq('submission_id', id).order('event_at'),
     ])
     if (commitments.error) throw commitments.error
     if (uploads.error) throw uploads.error
-    return jsonOk({ ...submission, commitments: commitments.data, uploads: uploads.data })
+    if (reviews.error) throw reviews.error
+    return jsonOk({ ...submission, commitments: commitments.data, uploads: uploads.data, reviews: reviews.data })
   } catch (error) {
     return jsonError(error)
   }
