@@ -280,7 +280,7 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await expect(page.getByRole('status')).toContainText('Profile saved.')
   await page.getByRole('checkbox', { name: 'Product updates' }).check()
   await page.getByRole('button', { name: 'Save notification preferences' }).click()
-  await expect(page.getByRole('status')).toContainText('Notification preferences saved.')
+  await expect(page.getByText('Notification preferences saved.', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('checkbox', { name: 'Product updates' })).toBeChecked()
 })
