@@ -270,7 +270,8 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await page.goto('/lecturer/assignments?archived=true')
   await expect(page.getByRole('heading', { name: 'Browser fallback upload' })).toBeVisible()
   await page.goto('/lecturer/assignments')
-  await expect(page.getByRole('heading', { name: 'Browser fallback upload' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Browser fallback upload' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Archived' })).toBeVisible()
 
   await page.goto('/lecturer/profile')
   const phoneSuffix = String(Math.floor(Math.random() * 1_000_000_000)).padStart(9, '0')
