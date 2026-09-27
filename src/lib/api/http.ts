@@ -88,6 +88,15 @@ export function jsonError(error: unknown): Response {
   }
   if (typeof error === 'object' && error !== null && 'code' in error && 'message' in error) {
     const databaseError = error as { code: string; message: string }
+    if (databaseError.code === 'P0001') {
+      const conflictMessages: Record<string, string> = {
+        'assignment deadline must be in the future': 'Set a future deadline before publishing this assignment.',
+        'assignment is not a draft': 'Only draft assignments can be published.',
+        'assignment is not published': 'Only published assignments can be closed.',
+      }
+      const message = conflictMessages[databaseError.message]
+      if (message) return jsonError(new ApiError(409, 'conflict', message))
+    }
     const mapped = databaseError.code === 'P0002'
       ? new ApiError(404, 'not_found', 'The requested resource was not found.')
       : databaseError.code === 'P0001' || databaseError.code === '23505'

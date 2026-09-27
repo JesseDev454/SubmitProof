@@ -16,7 +16,7 @@ export default function AssignmentLifecycleActions({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function run(action: 'close' | 'archive') {
+  async function run(action: 'publish' | 'close' | 'archive') {
     setBusy(true)
     setError(null)
     try {
@@ -33,11 +33,15 @@ export default function AssignmentLifecycleActions({
     }
   }
 
-  if (status === 'draft' || archived) return null
+  if (archived) return null
   return (
     <div className="space-y-2">
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-800">{error}</p>}
-      {status === 'published' ? (
+      {status === 'draft' ? (
+        <button type="button" disabled={busy} onClick={() => void run('publish')} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-50">
+          {busy ? 'Publishing…' : 'Publish assignment'}
+        </button>
+      ) : status === 'published' ? (
         <button type="button" disabled={busy} onClick={() => void run('close')} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50">
           {busy ? 'Closing…' : 'Close assignment'}
         </button>
