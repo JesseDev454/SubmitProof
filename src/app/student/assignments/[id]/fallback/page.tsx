@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { useSubmissionFlow } from "@/features/submissions/SubmissionFlowContext";
 import { buildFallbackPayload, createCommitmentNonce } from "@/features/submissions/fallbackPayload";
+import { buildSmsComposerLink } from "@/features/submissions/smsLink";
 
 type ApiResponse<T> = { data: T } | { error: { code?: string; message: string } };
 
@@ -37,6 +38,8 @@ export default function FallbackPage() {
   const [simulationError, setSimulationError] = useState<string | null>(null);
   const [recorded, setRecorded] = useState(false);
   const simulatorAvailable = process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_ENABLE_SIMULATED_SMS === "true";
+  const fallbackNumber = process.env.NEXT_PUBLIC_FALLBACK_SMS_NUMBER?.trim() ?? "";
+  const liveSmsAvailable = !simulatorAvailable && process.env.NEXT_PUBLIC_AFRICASTALKING_SMS_ENABLED === "true" && Boolean(fallbackNumber);
 
   const requestToken = useCallback(async (rotate: boolean) => {
     setTokenError(null);
@@ -76,6 +79,7 @@ export default function FallbackPage() {
       return null;
     }
   }, [commitmentToken, fileHash, nonce]);
+  const smsComposerLink = message && liveSmsAvailable ? buildSmsComposerLink(fallbackNumber, message) : null;
 
   const copyMessage = async () => {
     if (!message) return;
@@ -143,7 +147,14 @@ export default function FallbackPage() {
         {simulatorAvailable && <button type="button" onClick={() => void simulateSms()} disabled={isSimulating || recorded} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">{isSimulating ? "Recording commitment…" : recorded ? "Commitment recorded" : "Simulate SMS"}</button>}
       </div>
       {simulatorAvailable && <p className="mt-3 text-xs text-slate-500">Simulation is enabled for this environment; it records server time and marks the source as simulated.</p>}
-      {!simulatorAvailable && <p className="mt-3 text-xs text-slate-500">SMS delivery is not connected in this environment. Copy this exact message; a live gateway integration is not available yet.</p>}
+      {liveSmsAvailable && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <p className="text-sm leading-6 text-emerald-950">Send this exact message from your registered phone number to <strong>{fallbackNumber}</strong>. The commitment appears only after the server receives and records the SMS.</p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          {smsComposerLink && <a href={smsComposerLink} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800">Open SMS app</a>}
+          <button type="button" onClick={() => router.push(`/student/assignments/${assignment.id}/fallback/confirmation`)} className="rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">I sent it — check for confirmation</button>
+        </div>
+      </div>}
+      {!simulatorAvailable && !liveSmsAvailable && <p className="mt-3 text-xs text-slate-500">SMS delivery is not configured in this environment. You can copy this message, but it will count only after a configured SMS gateway records it.</p>}
       {simulationError && <p role="alert" className="mt-3 text-sm text-rose-700">{simulationError}</p>}
     </section>}
   </div>

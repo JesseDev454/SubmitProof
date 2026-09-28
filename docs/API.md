@@ -49,6 +49,14 @@ The student builds the SMS payload as `SP1|<token>|<nonce>|<lowercase-sha256>`. 
 
 `POST /api/dev/simulate-sms` accepts `{ "payload": "SP1|..." }` and is available only when `ENABLE_SIMULATED_SMS=true` outside production. It uses the signed-in student’s registered phone and server time, then calls the same provider-independent processor as a future gateway adapter. Simulated evidence is marked `provider: "simulated"`; it does not demonstrate carrier delivery.
 
+### Africa's Talking inbound SMS callback
+
+`POST /api/webhooks/africastalking?key=<AFRICASTALKING_CALLBACK_SECRET>` accepts Africa's Talking's `application/x-www-form-urlencoded` incoming SMS callback (`from`, `to`, `text`, `date`, and `id`). Configure `AFRICASTALKING_CALLBACK_SECRET` as a random secret of at least 32 characters and `AFRICASTALKING_SHORTCODE` to the shortcode assigned to the app. The handler compares the secret in constant time, checks the destination shortcode and sender phone, and accepts only the `SP1|<token>|<nonce>|<lowercase-sha256>` message format. It stores a hash of the token, never the raw token or SMS body.
+
+The route acknowledges recorded acceptances, rejections, and duplicate deliveries with HTTP 200 so invalid messages are not retried indefinitely. Database processing failures return HTTP 503 so Africa's Talking can retry. The provider message ID makes retries idempotent; callback events remain in the webhook audit table. Only an ISO 8601 callback `date` with an explicit timezone is used as gateway time. Missing or timezone-ambiguous dates are retained as no trusted gateway timestamp and cannot establish pre-deadline proof.
+
+To connect a hosted environment, add `AFRICASTALKING_SHORTCODE`, `AFRICASTALKING_CALLBACK_SECRET`, `NEXT_PUBLIC_FALLBACK_SMS_NUMBER`, and `NEXT_PUBLIC_AFRICASTALKING_SMS_ENABLED=true` to the Vercel Production environment. Set the enabled flag only after the callback is configured. Deploy, then set the SMS inbox callback URL in the Africa's Talking app to `https://<your-domain>/api/webhooks/africastalking?key=<same-secret>`. The student fallback screen will show the shortcode, offer the phone's SMS composer, and let the student check for the server's confirmation. Use the app's Sandbox callback/simulator for test traffic; sandbox shortcode messages are not carrier delivery to a handset. Keep the callback URL private because its query parameter is the callback credential. Apply all committed Supabase migrations before enabling the callback.
+
 ## Upload and verification
 
 `POST /api/assignments/:id/uploads` accepts:
