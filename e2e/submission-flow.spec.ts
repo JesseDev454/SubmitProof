@@ -222,7 +222,7 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   const courseColor = await page.getByLabel('Course').evaluate((element) => getComputedStyle(element).color)
   expect(courseColor).not.toBe('rgb(237, 237, 237)')
   await page.getByRole('button', { name: 'Publish assignment' }).click()
-  await expect(page.getByRole('alert')).toContainText('Choose a future deadline before publishing.')
+  await expect(page.locator('#assignment-error')).toContainText('Choose a future deadline before publishing.')
   await expect(page.getByLabel('Deadline')).toBeFocused()
   await page.getByLabel('Description').fill('This verifies that a publication failure preserves the saved draft.')
   const graceInput = page.getByLabel('Fallback upload grace period (minutes)')
