@@ -191,7 +191,7 @@ export function StudentSidebar() {
           Learning without limits.
         </h4>
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-          SubmitProof helps you stay on track — online or offline.
+          Prepare SMS proof when an internet upload fails, then upload later.
         </p>
       </div>
     </aside>

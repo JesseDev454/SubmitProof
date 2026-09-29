@@ -126,7 +126,7 @@ export default function SubmitAssignmentPage() {
           Submit Assignment
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Upload and submit your work. Submit with confidence. Even when <strong>you&apos;re offline</strong>.
+          Upload online, or prepare an SMS commitment if the internet upload fails. Upload the original file when you reconnect.
         </p>
       </div>
 

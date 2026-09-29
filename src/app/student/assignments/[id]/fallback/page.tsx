@@ -117,7 +117,7 @@ export default function FallbackPage() {
     <header>
       <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Fallback commitment</p>
       <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Record a fingerprint for later upload</h1>
-      <p className="mt-2 text-sm leading-6 text-slate-600">SubmitProof records a hash of the selected file. The file itself is not sent in this message. The commitment counts only after the server records it.</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">SubmitProof hashes the selected file on your device. Request the token while you have internet access, then send the message by SMS if your data connection fails. Upload the unchanged file when internet returns. The commitment counts only after the server records the SMS.</p>
     </header>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

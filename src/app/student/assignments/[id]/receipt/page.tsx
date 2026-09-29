@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/auth/server";
 import { loadStudentAssignment } from "@/lib/student/data";
+import { explainPolicyResult } from "@/lib/submissions/policyExplanation";
 import { PrintButton } from "./PrintButton";
 import { ViewFileButton } from "./ViewFileButton";
 
@@ -50,6 +51,18 @@ export default async function SubmissionReceiptPage({ params }: { params: Promis
   const matchedCommitment = latestUpload?.matched_commitment_id
     ? commitments.find((commitment) => commitment.id === latestUpload.matched_commitment_id) ?? null
     : null;
+  const policyVersionId = matchedCommitment?.policy_version_id ?? latestUpload?.policy_version_id ?? null;
+  const policyResult = policyVersionId
+    ? await supabase.from("assignment_policy_versions").select("deadline_at, grace_period_minutes").eq("id", policyVersionId).maybeSingle()
+    : { data: null, error: null };
+  if (policyResult.error) throw policyResult.error;
+  const explanation = latestUpload ? explainPolicyResult({
+    verificationResult: latestUpload.verification_result,
+    policyResult: latestUpload.policy_result,
+    uploadedAt: latestUpload.uploaded_at,
+    matchedCommitment: matchedCommitment ? { gatewayEventAt: matchedCommitment.gateway_event_at } : null,
+    policy: policyResult.data ? { deadlineAt: policyResult.data.deadline_at, gracePeriodMinutes: policyResult.data.grace_period_minutes } : null,
+  }) : null;
 
   return <article className="mx-auto flex max-w-4xl flex-col gap-6 print:max-w-none">
     <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
@@ -75,6 +88,7 @@ export default async function SubmissionReceiptPage({ params }: { params: Promis
         <div><dt className="text-xs font-semibold uppercase text-slate-500">Policy qualification</dt><dd className="mt-1 capitalize text-sm text-slate-900">{label(latestUpload?.policy_result)}</dd></div>
       </dl>
       <p className="mt-4 text-xs leading-5 text-slate-500">Verification compares file fingerprints. Policy qualification uses the commitment and storage receipt times against the applicable policy version. These are separate results.</p>
+      {explanation && <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-950">{explanation}</p>}
     </section>
 
     {latestUpload && <section aria-labelledby="upload-heading" className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm print:break-inside-avoid">
