@@ -30,10 +30,12 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
   const router = useRouter()
   const [title, setTitle] = useState(initial.title)
   const [description, setDescription] = useState(initial.description ?? '')
-  const [deadlineLocal, setDeadlineLocal] = useState(() => {
+  const initialDeadlineLocal = (() => {
     const deadline = new Date(initial.policy.deadlineAt)
     return new Date(deadline.getTime() - deadline.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-  })
+  })()
+  const [deadlineDate, setDeadlineDate] = useState(initialDeadlineLocal.slice(0, 10))
+  const [deadlineTime, setDeadlineTime] = useState(initialDeadlineLocal.slice(11, 16))
   const [fallbackEnabled, setFallbackEnabled] = useState(initial.policy.fallbackEnabled)
   const [graceInput, setGraceInput] = useState(String(initial.policy.gracePeriodMinutes))
   const [allowedMimeTypes, setAllowedMimeTypes] = useState(initial.policy.allowedMimeTypes)
@@ -57,6 +59,11 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
       document.getElementById('settings-grace')?.focus()
       return
     }
+    if (!deadlineDate || !deadlineTime) {
+      setError('Choose both a deadline date and time before saving.')
+      document.getElementById(!deadlineDate ? 'settings-deadline-date' : 'settings-deadline-time')?.focus()
+      return
+    }
     setSaving(true)
     try {
       const response = await fetch(`/api/assignments/${initial.id}`, {
@@ -66,7 +73,7 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
           title: title.trim(),
           description: description.trim(),
           policy: {
-            deadlineAt: new Date(deadlineLocal).toISOString(),
+            deadlineAt: new Date(`${deadlineDate}T${deadlineTime}`).toISOString(),
             fallbackEnabled,
             gracePeriodMinutes,
             allowedMimeTypes,
@@ -97,7 +104,12 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
         <div><label htmlFor="settings-title" className="mb-1 block text-sm font-medium">Title</label><input id="settings-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-500" /></div>
         <div><label htmlFor="settings-description" className="mb-1 block text-sm font-medium">Description</label><textarea id="settings-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={10000} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder:text-gray-500" /></div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><label htmlFor="settings-deadline" className="mb-1 block text-sm font-medium">Deadline</label><input id="settings-deadline" type="datetime-local" value={deadlineLocal} onChange={(event) => setDeadlineLocal(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" /></div>
+          <div className="sm:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><label htmlFor="settings-deadline-date" className="mb-1 block text-sm font-medium">Deadline date</label><input id="settings-deadline-date" type="date" value={deadlineDate} onChange={(event) => setDeadlineDate(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" /></div>
+              <div><label htmlFor="settings-deadline-time" className="mb-1 block text-sm font-medium">Deadline time</label><input id="settings-deadline-time" type="time" value={deadlineTime} onChange={(event) => setDeadlineTime(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" /><p className="mt-1 text-xs text-gray-600">Shown in your local time.</p></div>
+            </div>
+          </div>
           <div><label htmlFor="settings-size" className="mb-1 block text-sm font-medium">Maximum size</label><select id="settings-size" value={maxSizeMb} onChange={(event) => setMaxSizeMb(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900">{[1, 5, 10, 25, 50].map((size) => <option key={size} value={size}>{size} MiB</option>)}</select></div>
         </div>
         <fieldset><legend className="mb-2 text-sm font-medium">Allowed file types</legend><div className="grid gap-2 sm:grid-cols-2">{FILE_TYPES.map((fileType) => <label key={fileType.mime} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allowedMimeTypes.includes(fileType.mime)} onChange={() => toggleMimeType(fileType.mime)} />{fileType.label}</label>)}</div></fieldset>

@@ -26,7 +26,8 @@ export default function CreateAssignmentPage() {
   const [courseId, setCourseId] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [deadlineLocal, setDeadlineLocal] = useState('')
+  const [deadlineDate, setDeadlineDate] = useState('')
+  const [deadlineTime, setDeadlineTime] = useState('23:59')
   const [mimeTypes, setMimeTypes] = useState<string[]>(['application/pdf'])
   const [maxSizeMb, setMaxSizeMb] = useState(10)
   const [graceInput, setGraceInput] = useState('0')
@@ -103,6 +104,13 @@ export default function CreateAssignmentPage() {
       else router.push(`/lecturer/assignments/${savedDraftId}`)
       return
     }
+    if (deadlineDate && !deadlineTime) {
+      setError('Choose a deadline time, or clear the deadline date to keep this as an undated draft.')
+      setValidationField('assignment-deadline-time')
+      requestAnimationFrame(() => document.getElementById('assignment-deadline-time')?.focus())
+      return
+    }
+    const deadlineLocal = deadlineDate && deadlineTime ? `${deadlineDate}T${deadlineTime}` : ''
     const validation = validateCreateAssignment({ title, courseId, description, deadlineLocal, mimeTypes, graceInput }, status, new Date())
     if (validation) {
       setError(validation.message)
@@ -191,10 +199,20 @@ export default function CreateAssignmentPage() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="assignment-deadline" className="mb-1 block text-sm font-medium text-gray-700">Deadline <span className="text-gray-500">(required to publish)</span></label>
-            <input id="assignment-deadline" type="datetime-local" value={deadlineLocal} onChange={(event) => { setDeadlineLocal(event.target.value); clearValidation('assignment-deadline') }} aria-invalid={validationField === 'assignment-deadline'} aria-describedby={validationField === 'assignment-deadline' ? 'assignment-error' : undefined} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" />
-            {validationField === 'assignment-deadline' && <p className="mt-1 text-sm text-red-700">{error}</p>}
-            <p className="mt-1 text-xs text-gray-500">A draft with no deadline uses a temporary deadline 7 days from creation.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="assignment-deadline" className="mb-1 block text-sm font-medium text-gray-700">Deadline date <span className="text-gray-500">(required to publish)</span></label>
+                <input id="assignment-deadline" type="date" value={deadlineDate} onChange={(event) => { setDeadlineDate(event.target.value); clearValidation('assignment-deadline') }} aria-invalid={validationField === 'assignment-deadline'} aria-describedby={validationField === 'assignment-deadline' ? 'assignment-error' : undefined} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" />
+                {validationField === 'assignment-deadline' && <p className="mt-1 text-sm text-red-700">{error}</p>}
+              </div>
+              <div>
+                <label htmlFor="assignment-deadline-time" className="mb-1 block text-sm font-medium text-gray-700">Deadline time</label>
+                <input id="assignment-deadline-time" type="time" value={deadlineTime} onChange={(event) => { setDeadlineTime(event.target.value); clearValidation('assignment-deadline-time') }} aria-invalid={validationField === 'assignment-deadline-time'} aria-describedby={validationField === 'assignment-deadline-time' ? 'assignment-deadline-time-help assignment-error' : 'assignment-deadline-time-help'} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" />
+                {validationField === 'assignment-deadline-time' && <p className="mt-1 text-sm text-red-700">{error}</p>}
+                <p id="assignment-deadline-time-help" className="mt-1 text-xs text-gray-600">Defaults to 11:59 PM in your local time. You can change it.</p>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">The date and time must be in the future to publish. A draft with no date uses a temporary deadline 7 days from creation.</p>
           </div>
           <div>
             <label htmlFor="assignment-size" className="mb-1 block text-sm font-medium text-gray-700">Maximum file size</label>
