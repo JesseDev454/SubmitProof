@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { parseGracePeriodMinutes } from '@/features/assignments/assignmentEditor'
+
 const FILE_TYPES = [
   { mime: 'application/pdf', label: 'PDF' },
   { mime: 'image/png', label: 'PNG image' },
@@ -33,7 +35,7 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
     return new Date(deadline.getTime() - deadline.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
   })
   const [fallbackEnabled, setFallbackEnabled] = useState(initial.policy.fallbackEnabled)
-  const [gracePeriodMinutes, setGracePeriodMinutes] = useState(initial.policy.gracePeriodMinutes)
+  const [graceInput, setGraceInput] = useState(String(initial.policy.gracePeriodMinutes))
   const [allowedMimeTypes, setAllowedMimeTypes] = useState(initial.policy.allowedMimeTypes)
   const [maxSizeMb, setMaxSizeMb] = useState(initial.policy.maxFileSizeBytes / 1024 / 1024)
   const [saving, setSaving] = useState(false)
@@ -47,9 +49,15 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
   }
 
   async function save() {
-    setSaving(true)
     setError(null)
     setMessage(null)
+    const gracePeriodMinutes = parseGracePeriodMinutes(graceInput)
+    if (gracePeriodMinutes === null) {
+      setError('Enter a whole number of grace minutes from 0 to 2147483647.')
+      document.getElementById('settings-grace')?.focus()
+      return
+    }
+    setSaving(true)
     try {
       const response = await fetch(`/api/assignments/${initial.id}`, {
         method: 'PATCH',
@@ -93,7 +101,7 @@ export default function AssignmentSettingsForm({ initial }: { initial: Assignmen
           <div><label htmlFor="settings-size" className="mb-1 block text-sm font-medium">Maximum size</label><select id="settings-size" value={maxSizeMb} onChange={(event) => setMaxSizeMb(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900">{[1, 5, 10, 25, 50].map((size) => <option key={size} value={size}>{size} MiB</option>)}</select></div>
         </div>
         <fieldset><legend className="mb-2 text-sm font-medium">Allowed file types</legend><div className="grid gap-2 sm:grid-cols-2">{FILE_TYPES.map((fileType) => <label key={fileType.mime} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={allowedMimeTypes.includes(fileType.mime)} onChange={() => toggleMimeType(fileType.mime)} />{fileType.label}</label>)}</div></fieldset>
-        <div><label htmlFor="settings-grace" className="mb-1 block text-sm font-medium">Fallback grace period (minutes)</label><input id="settings-grace" type="number" min={0} max={2147483647} value={gracePeriodMinutes} onChange={(event) => setGracePeriodMinutes(Math.max(0, Number(event.target.value) || 0))} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" /></div>
+        <div><label htmlFor="settings-grace" className="mb-1 block text-sm font-medium">Fallback grace period (minutes)</label><input id="settings-grace" type="number" min={0} max={2147483647} step={1} inputMode="numeric" value={graceInput} onChange={(event) => setGraceInput(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900" /><p className="mt-1 text-xs text-gray-600">0 allows no upload after the deadline. A longer period gives students time to upload the committed file.</p></div>
         <label className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm"><input type="checkbox" checked={fallbackEnabled} onChange={(event) => setFallbackEnabled(event.target.checked)} className="mt-0.5" /><span><strong>Enable connectivity fallback</strong><span className="mt-1 block text-xs text-gray-600">This policy is editable only while the assignment remains a draft.</span></span></label>
       </section>
       <button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save draft settings'}</button>

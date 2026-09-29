@@ -119,6 +119,7 @@ test('student records a normal upload and a simulated commitment, then verifies 
   await expect(page).toHaveURL(new RegExp(`/student/assignments/${normalAssignmentId}/receipt`))
   await expect(page.getByRole('heading', { name: 'Submission receipt' })).toBeVisible()
   await expect(page.getByText('not applicable', { exact: true })).toHaveCount(2)
+  await expect(page.getByText(/Normal online upload: no SMS commitment was used/)).toBeVisible()
 
   await page.goto(`/student/assignments/${fallbackAssignmentId}`)
   await page.getByRole('link', { name: 'Upload assignment' }).click()
@@ -150,6 +151,7 @@ test('student records a normal upload and a simulated commitment, then verifies 
 
   await page.getByRole('link', { name: 'View receipt' }).click()
   await expect(page.getByRole('heading', { name: 'Submission receipt' })).toBeVisible()
+  await expect(page.getByText(/uploaded file does not match a recorded SMS fingerprint/)).toBeVisible()
   const viewFile = page.getByRole('button', { name: 'View file' })
   await expect(viewFile).toBeVisible()
   const downloadPromise = page.waitForEvent('download')
@@ -217,7 +219,17 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
 
   await page.getByLabel('Title').fill('Draft retained after publish failure')
   await page.getByLabel('Course').selectOption(courseId)
+  const courseColor = await page.getByLabel('Course').evaluate((element) => getComputedStyle(element).color)
+  expect(courseColor).not.toBe('rgb(237, 237, 237)')
+  await page.getByRole('button', { name: 'Publish assignment' }).click()
+  await expect(page.getByRole('alert')).toContainText('Choose a future deadline before publishing.')
+  await expect(page.getByLabel('Deadline')).toBeFocused()
   await page.getByLabel('Description').fill('This verifies that a publication failure preserves the saved draft.')
+  const graceInput = page.getByLabel('Fallback upload grace period (minutes)')
+  await graceInput.press('ControlOrMeta+A')
+  await graceInput.press('Backspace')
+  await expect(graceInput).toHaveValue('')
+  await graceInput.fill('45')
   const deadline = new Date(Date.now() + 48 * 60 * 60_000)
   const localDeadline = [deadline.getFullYear(), String(deadline.getMonth() + 1).padStart(2, '0'), String(deadline.getDate()).padStart(2, '0')].join('-')
     + `T${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`
@@ -247,12 +259,20 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await expect(page.getByRole('heading', { name: 'Draft retained after publish failure' })).toBeVisible()
   await expect(page.getByText('draft', { exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Edit draft settings' })).toBeVisible()
+  await page.getByRole('link', { name: 'Edit draft settings' }).click()
+  const settingsGrace = page.getByLabel('Fallback grace period (minutes)')
+  await expect(settingsGrace).toHaveValue('45')
+  await settingsGrace.press('ControlOrMeta+A')
+  await settingsGrace.press('Backspace')
+  await expect(settingsGrace).toHaveValue('')
+  await settingsGrace.fill('90')
+  await page.getByRole('button', { name: 'Save draft settings' }).click()
+  await expect(page.getByText(/Draft settings saved/)).toBeVisible()
   await page.unroute(publishEndpoint)
 
   await page.goto('/lecturer/assignments/new')
   await page.getByLabel('Title').fill('Lecturer published assignment')
   await page.getByLabel('Course').selectOption(courseId)
-  await page.getByLabel('Description').fill('Published from the lecturer UI.')
   await page.getByLabel('Deadline').fill(localDeadline)
   await page.getByRole('button', { name: 'Publish assignment' }).click()
   await expect(page).toHaveURL(/\/lecturer\/assignments\/[0-9a-f-]+$/)
@@ -285,6 +305,7 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await expect(
     page.getByText('Latest fallback policy result').locator('..').getByText('does not qualify', { exact: true }),
   ).toBeVisible()
+  await expect(page.getByText(/uploaded file does not match a recorded SMS fingerprint/)).toBeVisible()
   await page.getByRole('button', { name: 'Flag for review' }).click()
   await page.getByRole('button', { name: 'Confirm flagged' }).click()
   await expect(page.getByText(/Latest decision: flagged/)).toBeVisible()

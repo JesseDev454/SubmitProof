@@ -93,7 +93,7 @@ export default function LecturerSidebar() {
         </div>
         <p className="text-[13px] font-semibold text-gray-800">Learning without limits.</p>
         <p className="mt-0.5 text-[12px] leading-snug text-gray-400">
-          SubmitProof helps you stay on track — online or offline.
+          Students can record SMS proof and upload their file later.
         </p>
       </div>
     </aside>

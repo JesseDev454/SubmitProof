@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation'
 import FallbackReviewActions from '@/components/lecturer/FallbackReviewActions'
 import DownloadEvidenceButton from '@/components/shared/DownloadEvidenceButton'
 import { createClient } from '@/lib/auth/server'
+import { explainPolicyResult } from '@/lib/submissions/policyExplanation'
 
 type Props = { params: Promise<{ id: string; submissionId: string }> }
 
@@ -75,8 +76,17 @@ export default async function LecturerSubmissionPage({ params }: Props) {
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold text-gray-900">Upload evidence</h2>
         {uploads.length === 0 ? <p className="mt-3 text-sm text-gray-500">No finalized upload has been recorded.</p> : <ol className="mt-4 space-y-3">{uploads.map((upload) => {
-          const policy = upload.policy_version_id ? policyById.get(upload.policy_version_id) : null
-          return <li key={upload.id} className="rounded-lg border border-gray-100 p-4"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-medium text-gray-900">Upload received {new Date(upload.uploaded_at).toLocaleString()}</p><p className="mt-1 text-xs text-gray-500">Finalized {new Date(upload.finalized_at).toLocaleString()} · Policy version {policy?.version_number ?? 'not recorded'}</p><p className="mt-2 break-all font-mono text-xs text-gray-500">SHA-256: {upload.server_sha256}</p></div><DownloadEvidenceButton uploadId={upload.id} /></div><div className="mt-3 flex flex-wrap gap-2"><EvidenceResult label="Verification" value={upload.verification_result} /><EvidenceResult label="Policy" value={upload.policy_result} /></div></li>
+          const matchedCommitment = upload.matched_commitment_id ? commitments.find((commitment) => commitment.id === upload.matched_commitment_id) ?? null : null
+          const policyVersionId = matchedCommitment?.policy_version_id ?? upload.policy_version_id
+          const policy = policyVersionId ? policyById.get(policyVersionId) : null
+          const explanation = explainPolicyResult({
+            verificationResult: upload.verification_result,
+            policyResult: upload.policy_result,
+            uploadedAt: upload.uploaded_at,
+            matchedCommitment: matchedCommitment ? { gatewayEventAt: matchedCommitment.gateway_event_at } : null,
+            policy: policy ? { deadlineAt: policy.deadline_at, gracePeriodMinutes: policy.grace_period_minutes } : null,
+          })
+          return <li key={upload.id} className="rounded-lg border border-gray-100 p-4"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="font-medium text-gray-900">Upload received {new Date(upload.uploaded_at).toLocaleString()}</p><p className="mt-1 text-xs text-gray-500">Finalized {new Date(upload.finalized_at).toLocaleString()} · Policy version {policy?.version_number ?? 'not recorded'}</p><p className="mt-2 break-all font-mono text-xs text-gray-500">SHA-256: {upload.server_sha256}</p></div><DownloadEvidenceButton uploadId={upload.id} /></div><div className="mt-3 flex flex-wrap gap-2"><EvidenceResult label="Verification" value={upload.verification_result} /><EvidenceResult label="Policy" value={upload.policy_result} /></div><p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm leading-6 text-blue-950">{explanation}</p></li>
         })}</ol>}
       </section>
 
