@@ -222,8 +222,8 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   const courseColor = await page.getByLabel('Course').evaluate((element) => getComputedStyle(element).color)
   expect(courseColor).not.toBe('rgb(237, 237, 237)')
   await page.getByRole('button', { name: 'Publish assignment' }).click()
-  await expect(page.locator('#assignment-error')).toContainText('Choose a future deadline before publishing.')
-  await expect(page.getByLabel('Deadline')).toBeFocused()
+  await expect(page.locator('#assignment-error')).toContainText('Choose a future deadline date before publishing.')
+  await expect(page.getByLabel('Deadline date')).toBeFocused()
   await page.getByLabel('Description').fill('This verifies that a publication failure preserves the saved draft.')
   const graceInput = page.getByLabel('Fallback upload grace period (minutes)')
   await graceInput.press('ControlOrMeta+A')
@@ -231,9 +231,8 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await expect(graceInput).toHaveValue('')
   await graceInput.fill('45')
   const deadline = new Date(Date.now() + 48 * 60 * 60_000)
-  const localDeadline = [deadline.getFullYear(), String(deadline.getMonth() + 1).padStart(2, '0'), String(deadline.getDate()).padStart(2, '0')].join('-')
-    + `T${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`
-  await page.getByLabel('Deadline').fill(localDeadline)
+  const localDeadlineDate = [deadline.getFullYear(), String(deadline.getMonth() + 1).padStart(2, '0'), String(deadline.getDate()).padStart(2, '0')].join('-')
+  await page.getByLabel('Deadline date').fill(localDeadlineDate)
   let releasePublish: () => void = () => {}
   let markPublishStarted: () => void = () => {}
   const publishStarted = new Promise<void>((resolve) => { markPublishStarted = resolve })
@@ -273,7 +272,7 @@ test('lecturer publishes assignments, reviews evidence, archives, and saves shar
   await page.goto('/lecturer/assignments/new')
   await page.getByLabel('Title').fill('Lecturer published assignment')
   await page.getByLabel('Course').selectOption(courseId)
-  await page.getByLabel('Deadline').fill(localDeadline)
+  await page.getByLabel('Deadline date').fill(localDeadlineDate)
   await page.getByRole('button', { name: 'Publish assignment' }).click()
   await expect(page).toHaveURL(/\/lecturer\/assignments\/[0-9a-f-]+$/)
   await expect(page.getByRole('heading', { name: 'Lecturer published assignment' })).toBeVisible()

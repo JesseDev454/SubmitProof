@@ -22,7 +22,7 @@ export function validateCreateAssignment(
   if (!input.title.trim()) return { field: 'assignment-title', message: 'Enter an assignment title.' }
   if (!input.courseId) return { field: 'assignment-course', message: 'Choose a course.' }
   if (status === 'published' && !input.deadlineLocal) {
-    return { field: 'assignment-deadline', message: 'Choose a future deadline before publishing.' }
+    return { field: 'assignment-deadline', message: 'Choose a future deadline date before publishing.' }
   }
   if (input.deadlineLocal) {
     const deadline = new Date(input.deadlineLocal)

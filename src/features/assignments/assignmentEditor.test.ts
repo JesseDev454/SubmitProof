@@ -26,7 +26,7 @@ describe('assignment editor validation', () => {
     expect(validateCreateAssignment({ ...valid, description: '' }, 'published', now)).toBeNull()
     expect(validateCreateAssignment({ ...valid, deadlineLocal: '' }, 'published', now)).toEqual({
       field: 'assignment-deadline',
-      message: 'Choose a future deadline before publishing.',
+      message: 'Choose a future deadline date before publishing.',
     })
     expect(validateCreateAssignment({ ...valid, mimeTypes: [] }, 'published', now)?.field).toBe('assignment-file-types')
   })
